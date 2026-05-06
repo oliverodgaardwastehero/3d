@@ -1,0 +1,47 @@
+@import 'tailwindcss';
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #09090b;
+  color: #f3f4f6;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+}
+
+canvas {
+  display: block;
+  outline: none;
+}
+
+@keyframes chapter-title-fade {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+  15% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  82% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px);
+  }
+}
+
+.chapter-title {
+  animation: chapter-title-fade 3.5s ease-out forwards;
+}
