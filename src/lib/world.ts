@@ -58,7 +58,17 @@ function buildGarageColliders() {
   }
 }
 
-buildGarageColliders()
+// Garage colliders are inactive while the office tour is the active scene.
+// Office walls are registered dynamically via addBoxCollider().
+void buildGarageColliders
+
+export function clearColliders() {
+  COLLIDERS.length = 0
+}
+
+export function addBoxCollider(cx: number, cz: number, halfW: number, halfD: number) {
+  COLLIDERS.push({ cx, cz, halfW, halfD })
+}
 
 /**
  * Push (x, z) outside any registered collider footprint, accounting for the

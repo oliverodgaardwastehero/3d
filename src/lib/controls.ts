@@ -3,8 +3,8 @@ export const CONTROL_MAP = [
   { name: 'backward', keys: ['ArrowDown', 'KeyS'] },
   { name: 'left', keys: ['ArrowLeft', 'KeyA'] },
   { name: 'right', keys: ['ArrowRight', 'KeyD'] },
-  { name: 'jump', keys: ['Space'] },
   { name: 'run', keys: ['ShiftLeft', 'ShiftRight'] },
+  { name: 'kick', keys: ['Space'] },
 ] as const
 
 export type ControlName = (typeof CONTROL_MAP)[number]['name']

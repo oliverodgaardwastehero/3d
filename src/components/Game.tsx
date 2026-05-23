@@ -10,7 +10,7 @@ import { World } from './World'
 
 export function Game() {
   const handleBegin = () => {
-    useGame.getState().start()
+    useGame.getState().start('depot')
   }
 
   return (

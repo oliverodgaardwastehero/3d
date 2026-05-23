@@ -1,22 +1,32 @@
 import { create } from 'zustand'
 import type { ChapterId } from './chapters'
 
+export type GameMode = 'office' | 'depot'
+
 type GameState = {
   hasStarted: boolean
+  gameMode: GameMode | null
   currentChapter: ChapterId | null
   visitedChapters: Set<ChapterId>
 
-  start: () => void
+  start: (mode: GameMode) => void
+  resetToMenu: () => void
   setCurrentChapter: (id: ChapterId | null) => void
 }
 
 export const useGame = create<GameState>((set, get) => ({
   hasStarted: false,
+  gameMode: null,
   currentChapter: null,
   visitedChapters: new Set(),
 
-  start: () => {
-    if (!get().hasStarted) set({ hasStarted: true })
+  start: (mode) => {
+    if (get().hasStarted) return
+    set({ hasStarted: true, gameMode: mode })
+  },
+
+  resetToMenu: () => {
+    set({ hasStarted: false, gameMode: null, currentChapter: null })
   },
 
   setCurrentChapter: (id) => {
