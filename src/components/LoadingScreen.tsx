@@ -156,14 +156,30 @@ export function LoadingScreen({ onBegin }: Props) {
   )
 }
 
+function CrownIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden>
+      <path d="M4 7l4 3 4-6 4 6 4-3-1 10H5L4 7Z" />
+    </svg>
+  )
+}
+
+// Gold / silver / bronze for the top three; neutral below.
+const RANK_BADGE = [
+  'bg-amber-300 text-[#1b2344] shadow-[0_2px_0_#a16207]',
+  'bg-slate-200 text-[#1b2344]',
+  'bg-[#cd8b4f] text-[#1b2344]',
+]
+
 function Leaderboard({ scores }: { scores: ScoreEntry[] }) {
   return (
     <aside
-      className="ts-rise absolute bottom-[clamp(1rem,4vh,2.25rem)] left-[clamp(1rem,3vw,2.25rem)] hidden w-[clamp(210px,17vw,268px)] rounded-2xl border border-white/12 bg-[#1b2344]/80 px-5 py-4 text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md sm:block"
+      className="ts-rise absolute bottom-[clamp(1rem,4vh,2.25rem)] left-[clamp(1rem,3vw,2.25rem)] hidden w-[clamp(212px,17vw,272px)] overflow-hidden rounded-2xl bg-gradient-to-b from-[#26315a]/85 to-[#161d39]/90 px-5 py-4 text-white shadow-[0_14px_36px_-10px_rgba(0,0,0,0.6)] ring-1 ring-white/10 backdrop-blur-md sm:block"
       style={{ animationDelay: '360ms' }}
     >
-      <div className="flex items-baseline justify-between">
-        <h2 className="text-[12px] font-bold uppercase tracking-[0.26em] text-[#75bdea]">
+      <div className="flex items-center justify-between">
+        <h2 className="flex items-center gap-1.5 text-[12px] font-bold uppercase tracking-[0.26em] text-[#75bdea]">
+          <CrownIcon />
           High scores
         </h2>
         <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">
@@ -171,27 +187,42 @@ function Leaderboard({ scores }: { scores: ScoreEntry[] }) {
         </span>
       </div>
 
+      <div className="mt-3 h-px bg-gradient-to-r from-white/20 via-white/5 to-transparent" />
+
       {scores.length === 0 ? (
         <p className="mt-3 text-[13px] font-semibold leading-snug text-white/55">
           No records yet — set the first!
         </p>
       ) : (
-        <ol className="mt-3 flex flex-col gap-1.5">
+        <ol className="mt-2 flex flex-col gap-0.5">
           {scores.map((entry, i) => (
             <li
               key={`${entry.at}-${i}`}
-              className="flex items-center gap-2.5 text-[14px]"
+              className={[
+                'flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[14px]',
+                i === 0 ? 'bg-amber-300/10 ring-1 ring-inset ring-amber-300/20' : '',
+              ].join(' ')}
             >
-              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/10 text-[12px] font-bold tabular-nums text-white/70">
+              <span
+                className={[
+                  'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[12px] font-bold tabular-nums',
+                  RANK_BADGE[i] ?? 'bg-white/10 text-white/65',
+                ].join(' ')}
+              >
                 {i + 1}
               </span>
-              <span className="min-w-0 flex-1 truncate text-left font-semibold text-white/85">
+              <span
+                className={[
+                  'min-w-0 flex-1 truncate text-left font-semibold',
+                  i === 0 ? 'text-white' : 'text-white/85',
+                ].join(' ')}
+              >
                 {entry.name ?? 'ANON'}
               </span>
               <span
                 className={[
                   'shrink-0 text-right font-bold tabular-nums',
-                  i === 0 ? 'text-[#75bdea]' : 'text-white/90',
+                  i === 0 ? 'text-amber-300' : 'text-white/90',
                 ].join(' ')}
               >
                 {entry.score >= 0 ? `+${entry.score}` : entry.score}
