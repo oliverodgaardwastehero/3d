@@ -153,13 +153,14 @@ export function Humanoid({
         {outline && <Outlines thickness={OUTLINE_THICKNESS} color={OUTLINE_COLOR} />}
       </mesh>
 
-      {/* Shoulder yoke — buries both arm roots so the shoulders don't gap */}
+      {/* Shoulder yoke — buries both arm roots so the shoulders don't gap.
+          No castShadow: it sits inside the torso's silhouette, so it adds a
+          shadow-pass draw call without changing the cast shadow. */}
       <mesh
         geometry={YOKE_GEO}
         material={mats.shirt}
         position={[0, 1.2, 0]}
         scale={[1.75 * girth, 0.66, 1.05]}
-        castShadow
         dispose={null}
       />
 
@@ -181,9 +182,10 @@ export function Humanoid({
       {/* Legs + Feet (hidden for seated pose). Hip = group origin. */}
       {!hideLegs && (
         <>
-          {/* Hip spheres bridge the torso-bottom → leg-top seam */}
-          <mesh geometry={HIP_GEO} material={mats.pants} position={[-0.18, 0.64, 0]} castShadow dispose={null} />
-          <mesh geometry={HIP_GEO} material={mats.pants} position={[0.18, 0.64, 0]} castShadow dispose={null} />
+          {/* Hip spheres bridge the torso-bottom → leg-top seam. No castShadow —
+              they're occluded by the torso/legs in the shadow map. */}
+          <mesh geometry={HIP_GEO} material={mats.pants} position={[-0.18, 0.64, 0]} dispose={null} />
+          <mesh geometry={HIP_GEO} material={mats.pants} position={[0.18, 0.64, 0]} dispose={null} />
 
           <group ref={leftLegRef} position={[-0.18, 0.62, 0]}>
             <mesh geometry={LEG_GEO} material={mats.pants} position={[0, -0.27, 0]} castShadow dispose={null} />
@@ -192,7 +194,6 @@ export function Humanoid({
               material={mats.shoe}
               position={[0, -0.55, 0.07]}
               scale={[1, 0.55, 1.5]}
-              castShadow
               dispose={null}
             />
           </group>
@@ -203,7 +204,6 @@ export function Humanoid({
               material={mats.shoe}
               position={[0, -0.55, 0.07]}
               scale={[1, 0.55, 1.5]}
-              castShadow
               dispose={null}
             />
           </group>

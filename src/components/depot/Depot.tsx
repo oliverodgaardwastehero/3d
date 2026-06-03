@@ -8,6 +8,7 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
 } from 'three'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { Instance, Instances, Text } from '@react-three/drei'
 import {
   BINS,
@@ -366,7 +367,7 @@ function Skyline({ halfX, halfZ }: SkylineProps) {
   // Deterministic skyline — same buildings every reload. Each building is its
   // own geometry (UVs scaled so windows tile at a consistent real-world size),
   // but all share ONE windowed material, and fog handles distance fade.
-  const { buildings, material, dispose } = useMemo(() => {
+  const { merged, material, dispose } = useMemo(() => {
     const rand = makeRand(0xc0ffee)
 
     // Windowed facade: a `map` (dark facade + lit/unlit windows) and a matching
@@ -417,9 +418,7 @@ function Skyline({ halfX, halfZ }: SkylineProps) {
       roughness: 0.88,
     })
 
-    type B = { pos: [number, number, number]; geo: BoxGeometry }
     const geos: BoxGeometry[] = []
-    const buildings: B[] = []
 
     const make = (x: number, z: number, w: number, h: number, d: number) => {
       const geo = new BoxGeometry(w, h, d)
@@ -428,8 +427,10 @@ function Skyline({ halfX, halfZ }: SkylineProps) {
       const sy = Math.max(1, h / 12.8)
       for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * sx, uv.getY(i) * sy)
       uv.needsUpdate = true
+      // Bake the world position into the vertices so every building can be
+      // merged into one static geometry below.
+      geo.translate(x, h / 2, z)
       geos.push(geo)
-      buildings.push({ pos: [x, h / 2, z], geo })
     }
 
     // East skyline (behind the bin row) — two depths for layered city feel.
@@ -472,23 +473,24 @@ function Skyline({ halfX, halfZ }: SkylineProps) {
       make(-halfX - 18 + (rand() - 0.5) * 3, i * 5 + (rand() - 0.5) * 2, w, h, d)
     }
 
+    // Collapse every building into one static geometry — a single draw call
+    // for the whole skyline instead of ~50. They share one material, never move
+    // and don't cast shadows, so merging is lossless.
+    const merged = mergeGeometries(geos)
+    for (const g of geos) g.dispose()
+
     const dispose = () => {
-      for (const g of geos) g.dispose()
+      merged?.dispose()
       map.dispose()
       emissive.dispose()
       material.dispose()
     }
 
-    return { buildings, material, dispose }
+    return { merged, material, dispose }
   }, [halfX, halfZ])
 
   useEffect(() => dispose, [dispose])
 
-  return (
-    <group>
-      {buildings.map((b, i) => (
-        <mesh key={i} position={b.pos} geometry={b.geo} material={material} dispose={null} />
-      ))}
-    </group>
-  )
+  if (!merged) return null
+  return <mesh geometry={merged} material={material} dispose={null} />
 }

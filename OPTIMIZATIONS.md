@@ -11,6 +11,32 @@ Quick legend:
 
 ---
 
+## 2026-06-03 — depot runtime draw-call pass (shipped)
+
+Measured with a temporary `?bench` hook logging `gl.info.render` in headless
+Chrome (SwiftShader). Static depot, player loaded, 0 NPCs, composer off so the
+counts reflect the real shadow+scene passes.
+
+- ✅ **Skyline merged into one geometry.** The ~50 background buildings were 50
+  separate `<mesh>` draw calls despite sharing one material, never moving, and
+  not casting shadows. Bake each building's translation into its geometry and
+  `mergeGeometries` into a single static mesh. **Static draw calls 113 → 92** in
+  a typical view (the rest were already frustum-culled; this also drops 50
+  per-frame cull tests), at +~350 triangles (0.3%, negligible). Up to ~49 fewer
+  calls in wide views where the whole skyline is on screen.
+- ✅ **Trimmed NPC shadow casters.** Dropped `castShadow` from the parts buried
+  in each Humanoid's silhouette — shoulder yoke, both hip spheres, both feet
+  (5 meshes/NPC). The cast shadow is unchanged (verified by screenshot); saves
+  up to ~25 shadow-pass draw calls/frame at a full 5-NPC crowd.
+- Verified: `tsc` clean, headless screenshot shows the skyline intact (window
+  UVs preserved) and shadows unchanged.
+- **Further opportunities (not taken — visual/scope trade-offs):** merge the
+  static road-band + lane-line decals (~20 calls); the per-NPC eye/glasses
+  meshes are ~7 color-pass calls each (~90 at a full crowd) but were added
+  deliberately for face read — a design call, not a silent perf cut.
+
+---
+
 ## 2026-06-03 — title-screen critical-path split (shipped)
 
 The start screen is pure DOM/CSS, but `main → App → Game` statically imported the
