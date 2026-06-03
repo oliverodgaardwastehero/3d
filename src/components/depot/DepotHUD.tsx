@@ -3,6 +3,7 @@ import { useGame } from '../../lib/store'
 import { useDepot } from '../../lib/depotState'
 import { GAME } from '../../lib/depotLayout'
 import { loadBestScore, maybeSaveBestScore } from '../../lib/highScore'
+import { submitScore } from '../../lib/leaderboard'
 
 export function DepotHUD() {
   const hasStarted = useGame((s) => s.hasStarted)
@@ -34,6 +35,7 @@ export function DepotHUD() {
     }
     const prev = loadBestScore()
     const next = maybeSaveBestScore(score)
+    void submitScore(score) // mirror locally + submit to the shared board
     setBestScore(next)
     setIsNewBest(prev == null || score > prev)
   }, [phase, score])

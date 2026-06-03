@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Local env files (secrets) — keep only the committed example.
+.env
+.env.*
+!.env.example
+
 # Heavy source renders + unsubset font masters used by `npm run optimize:title`.
 # The optimized AVIF/WebP + subset woff2 outputs are committed under public/.
 design-assets/

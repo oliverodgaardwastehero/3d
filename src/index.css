@@ -32,6 +32,9 @@ body,
     'Segoe UI',
     Roboto,
     sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 canvas {
@@ -125,14 +128,22 @@ canvas {
   mask-image: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.6), transparent 75%);
 }
 
-@keyframes bg-cinema-in {
-  0% {
+@keyframes ts-bg-fade {
+  from {
     opacity: 0;
-    transform: scale(1.06);
   }
-  100% {
+  to {
     opacity: 1;
+  }
+}
+
+/* Slow, dramatic Ken Burns push — eases in to 1.12x, then back out, forever. */
+@keyframes ts-bg-zoom {
+  from {
     transform: scale(1);
+  }
+  to {
+    transform: scale(1.12);
   }
 }
 
@@ -170,9 +181,13 @@ canvas {
   100% { opacity: 1; }
 }
 
-.intro-bg {
-  animation: bg-cinema-in 1400ms cubic-bezier(0.22, 0.8, 0.36, 1) both;
-  will-change: transform, opacity;
+.ts-bg-fade {
+  animation: ts-bg-fade 1200ms ease-out both;
+}
+
+.ts-bg-zoom {
+  animation: ts-bg-zoom 20s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
 /* ── Title-screen entrance (Defend the Waste Fractions) ─────────────── */
@@ -228,7 +243,8 @@ canvas {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .intro-bg,
+  .ts-bg-fade,
+  .ts-bg-zoom,
   .ts-rise,
   .ts-title,
   .ts-pop {
