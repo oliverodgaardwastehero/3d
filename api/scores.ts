@@ -11,10 +11,14 @@ import { Redis } from '@upstash/redis'
  * submissions never clobber each other (the whole reason this isn't a Blob).
  * ZRANGE ... REV gives the ranked top N in one O(log n + k) call.
  *
- * Needs UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN (Redis.fromEnv()).
- * Add an Upstash Redis store from the Vercel dashboard and they're injected.
+ * Reads the REST URL + token from the environment. Vercel's Upstash/KV
+ * Marketplace integration injects them as KV_REST_API_URL / KV_REST_API_TOKEN;
+ * a hand-added Upstash store uses UPSTASH_REDIS_REST_URL / _TOKEN. Accept both.
  */
-const redis = Redis.fromEnv()
+const redis = new Redis({
+  url: process.env.KV_REST_API_URL ?? process.env.UPSTASH_REDIS_REST_URL ?? '',
+  token: process.env.KV_REST_API_TOKEN ?? process.env.UPSTASH_REDIS_REST_TOKEN ?? '',
+})
 
 const KEY = 'depot:leaderboard'
 const DISPLAY = 5 // rows returned to the client
