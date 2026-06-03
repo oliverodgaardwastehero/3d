@@ -27,16 +27,54 @@ export function maybeSaveBestScore(score: number): number {
 }
 
 // ── Leaderboard (top scores) ────────────────────────────────────────────
-// Local-first, persisted per-browser. To make this a shared leaderboard on
-// Vercel, swap these two functions for `fetch('/api/scores')` calls backed by
-// a serverless route + Upstash Redis sorted set (ZADD / ZREVRANGE) or Postgres.
-// Keep the same ScoreEntry[] shape and the UI needs no changes — just make the
-// callers await them.
+// Local-first mirror, persisted per-browser. lib/leaderboard.ts wraps these
+// with the shared /api/scores (Upstash) calls and falls back here when the API
+// isn't reachable.
 
 const TOP_KEY = 'depot:topScores:v1'
+const NAME_KEY = 'depot:playerName:v1'
 const TOP_LIMIT = 5
 
-export type ScoreEntry = { score: number; at: number }
+/**
+ * Max characters for a leaderboard name. Single switch point — `api/scores.ts`
+ * mirrors this literal (keep them in sync). Set to 3 for arcade-style initials.
+ */
+export const MAX_NAME_LEN = 12
+
+export type ScoreEntry = { score: number; at: number; name?: string }
+
+/**
+ * Normalise a display name: uppercase, A–Z/0–9/space only, collapsed + capped,
+ * `ANON` if empty. Used client-side for UX; the server re-applies the same
+ * rules authoritatively (never trust the client).
+ */
+export function sanitizeName(raw?: string): string {
+  const cleaned = String(raw ?? '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, MAX_NAME_LEN)
+  return cleaned || 'ANON'
+}
+
+/** Last name the player entered, to prefill the entry field. '' if unset. */
+export function loadPlayerName(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return window.localStorage.getItem(NAME_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function savePlayerName(name: string): void {
+  try {
+    window.localStorage.setItem(NAME_KEY, sanitizeName(name))
+  } catch {
+    // ignore storage errors
+  }
+}
 
 function readList(): ScoreEntry[] {
   if (typeof window === 'undefined') return []
@@ -56,10 +94,15 @@ export function loadTopScores(limit = TOP_LIMIT): ScoreEntry[] {
     .slice(0, limit)
 }
 
-/** Record a finished match into the leaderboard; returns the new top list. */
-export function recordScore(score: number, limit = TOP_LIMIT): ScoreEntry[] {
+/** Record a finished match into the local mirror; returns the new top list. */
+export function recordScore(
+  score: number,
+  name?: string,
+  limit = TOP_LIMIT,
+): ScoreEntry[] {
   if (!Number.isFinite(score)) return loadTopScores(limit)
-  const next = [...readList(), { score, at: Date.now() }]
+  const entry: ScoreEntry = { score, at: Date.now(), name: sanitizeName(name) }
+  const next = [...readList(), entry]
     .sort((a, b) => b.score - a.score || a.at - b.at)
     .slice(0, limit)
   try {

@@ -159,7 +159,7 @@ export function LoadingScreen({ onBegin }: Props) {
 function Leaderboard({ scores }: { scores: ScoreEntry[] }) {
   return (
     <aside
-      className="ts-rise absolute bottom-[clamp(1rem,4vh,2.25rem)] left-[clamp(1rem,3vw,2.25rem)] hidden w-[clamp(190px,15vw,228px)] rounded-2xl border border-white/12 bg-[#1b2344]/80 px-5 py-4 text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md sm:block"
+      className="ts-rise absolute bottom-[clamp(1rem,4vh,2.25rem)] left-[clamp(1rem,3vw,2.25rem)] hidden w-[clamp(210px,17vw,268px)] rounded-2xl border border-white/12 bg-[#1b2344]/80 px-5 py-4 text-white shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md sm:block"
       style={{ animationDelay: '360ms' }}
     >
       <div className="flex items-baseline justify-between">
@@ -180,14 +180,17 @@ function Leaderboard({ scores }: { scores: ScoreEntry[] }) {
           {scores.map((entry, i) => (
             <li
               key={`${entry.at}-${i}`}
-              className="flex items-center gap-3 text-[15px]"
+              className="flex items-center gap-2.5 text-[14px]"
             >
               <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-white/10 text-[12px] font-bold tabular-nums text-white/70">
                 {i + 1}
               </span>
+              <span className="min-w-0 flex-1 truncate text-left font-semibold text-white/85">
+                {entry.name ?? 'ANON'}
+              </span>
               <span
                 className={[
-                  'flex-1 text-right font-bold tabular-nums',
+                  'shrink-0 text-right font-bold tabular-nums',
                   i === 0 ? 'text-[#75bdea]' : 'text-white/90',
                 ].join(' ')}
               >

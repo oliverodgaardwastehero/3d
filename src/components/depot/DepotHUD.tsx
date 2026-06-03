@@ -1,9 +1,19 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useGame } from '../../lib/store'
 import { useDepot } from '../../lib/depotState'
 import { GAME } from '../../lib/depotLayout'
-import { loadBestScore, maybeSaveBestScore } from '../../lib/highScore'
-import { submitScore } from '../../lib/leaderboard'
+import {
+  loadBestScore,
+  maybeSaveBestScore,
+  loadPlayerName,
+  savePlayerName,
+  sanitizeName,
+  MAX_NAME_LEN,
+  type ScoreEntry,
+} from '../../lib/highScore'
+import { fetchTopScores, submitScore } from '../../lib/leaderboard'
+
+const fmtScore = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
 export function DepotHUD() {
   const hasStarted = useGame((s) => s.hasStarted)
@@ -21,24 +31,58 @@ export function DepotHUD() {
   const [bestScore, setBestScore] = useState<number | null>(() => loadBestScore())
   const [isNewBest, setIsNewBest] = useState(false)
   const [showGo, setShowGo] = useState(false)
+  // Leaderboard name entry (shown on a qualifying top-5 finish).
+  const [topOnOver, setTopOnOver] = useState<ScoreEntry[] | null>(null)
+  const [qualifies, setQualifies] = useState(false)
+  const [name, setName] = useState<string>(() => loadPlayerName())
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [savedRank, setSavedRank] = useState<number | null>(null)
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
 
   // Kick off the first match.
   useEffect(() => {
     if (hasStarted && phase === 'idle') start()
   }, [hasStarted, phase, start])
 
-  // Save best score whenever a match finishes.
+  // On match end: record the local best, snapshot the shared board, and decide
+  // whether this score qualifies for the top 5. We only submit to the board on
+  // an explicit Save (with a name) from the game-over card below.
   useEffect(() => {
     if (phase !== 'over') {
       setIsNewBest(false)
+      setTopOnOver(null)
+      setQualifies(false)
+      setSaveState('idle')
+      setSavedRank(null)
       return
     }
     const prev = loadBestScore()
-    const next = maybeSaveBestScore(score)
-    void submitScore(score) // mirror locally + submit to the shared board
-    setBestScore(next)
+    setBestScore(maybeSaveBestScore(score))
     setIsNewBest(prev == null || score > prev)
+    setSaveState('idle')
+    setSavedRank(null)
+    setName(loadPlayerName())
+    setTopOnOver(null)
+
+    let cancelled = false
+    fetchTopScores(5).then((top) => {
+      if (cancelled) return
+      const lowest = top.length ? top[top.length - 1].score : -Infinity
+      setTopOnOver(top)
+      // Strictly greater — a tie with 5th place does not bump it.
+      setQualifies(top.length < 5 || score > lowest)
+    })
+    return () => {
+      cancelled = true
+    }
   }, [phase, score])
+
+  // Focus the name field as soon as it appears (qualified, not yet saved).
+  useEffect(() => {
+    if (phase === 'over' && qualifies && saveState !== 'saved') {
+      nameInputRef.current?.focus()
+    }
+  }, [phase, qualifies, saveState])
 
   // Flash a big GO! when the match kicks off (or restarts).
   useEffect(() => {
@@ -71,6 +115,17 @@ export function DepotHUD() {
   const seconds = Math.ceil(timeLeft)
   const mm = Math.floor(seconds / 60)
   const ss = (seconds % 60).toString().padStart(2, '0')
+
+  const handleSave = async () => {
+    if (saveState !== 'idle') return
+    setSaveState('saving')
+    const finalName = sanitizeName(name)
+    savePlayerName(finalName)
+    const top = await submitScore(score, finalName, 5)
+    const idx = top.findIndex((e) => e.name === finalName && e.score === score)
+    setSavedRank(idx >= 0 ? idx + 1 : null)
+    setSaveState('saved')
+  }
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
@@ -155,6 +210,71 @@ export function DepotHUD() {
                 <div className="mt-1 font-mono text-2xl">{wrongDeposits}</div>
               </div>
             </div>
+            {/* Top-5 name entry — only on a qualifying finish */}
+            {topOnOver === null ? (
+              <div className="mt-6 h-16" />
+            ) : qualifies ? (
+              saveState === 'saved' ? (
+                <div className="mt-6">
+                  <div className="text-sm font-semibold text-emerald-300">
+                    Saved as {sanitizeName(name)}
+                  </div>
+                  {savedRank != null && (
+                    <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-zinc-400">
+                      You&apos;re #{savedRank} on the board
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="mt-6">
+                  <div className="text-[10px] font-semibold uppercase tracking-[0.4em] text-[#75bdea]">
+                    Top 5 — enter your name
+                  </div>
+                  <div className="mt-3 flex items-center justify-center gap-2">
+                    <input
+                      ref={nameInputRef}
+                      value={name}
+                      onChange={(e) =>
+                        setName(
+                          e.target.value
+                            .toUpperCase()
+                            .replace(/[^A-Z0-9 ]/g, '')
+                            .slice(0, MAX_NAME_LEN),
+                        )
+                      }
+                      onKeyDown={(e) => {
+                        e.stopPropagation()
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          void handleSave()
+                        }
+                      }}
+                      maxLength={MAX_NAME_LEN}
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                      placeholder="YOUR NAME"
+                      className="w-44 rounded-lg border border-white/20 bg-white/10 px-3 py-2 text-center text-base font-semibold uppercase tracking-wider text-white outline-none placeholder:text-white/30 focus:border-[#75bdea]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void handleSave()}
+                      disabled={saveState !== 'idle'}
+                      className="rounded-lg bg-[#75bdea] px-5 py-2.5 text-sm font-bold uppercase tracking-wider text-[#1b2344] transition hover:brightness-105 disabled:opacity-60"
+                    >
+                      {saveState === 'saving' ? 'Saving…' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              )
+            ) : (
+              topOnOver.length >= 5 && (
+                <div className="mt-6 text-[10px] uppercase tracking-[0.3em] text-zinc-500">
+                  Beat {fmtScore(topOnOver[topOnOver.length - 1].score)} to make the top 5
+                </div>
+              )
+            )}
+
             <div className="mt-8 flex justify-center gap-3">
               <button
                 onClick={() => {

@@ -10,10 +10,12 @@ import { loadTopScores, recordScore, type ScoreEntry } from './highScore'
 
 const ENDPOINT = '/api/scores'
 
-type ApiResponse = { scores?: { score: number }[] }
+type ApiResponse = { scores?: { name?: string; score: number }[] }
 
 function toEntries(data: ApiResponse, limit: number): ScoreEntry[] {
-  return (data.scores ?? []).slice(0, limit).map((s) => ({ score: s.score, at: 0 }))
+  return (data.scores ?? [])
+    .slice(0, limit)
+    .map((s) => ({ score: s.score, at: 0, name: s.name }))
 }
 
 /** Top scores, highest first. Shared board when available, else local mirror. */
@@ -28,13 +30,17 @@ export async function fetchTopScores(limit = 5): Promise<ScoreEntry[]> {
 }
 
 /** Record a finished match: mirror locally, then submit to the shared board. */
-export async function submitScore(score: number, limit = 5): Promise<ScoreEntry[]> {
-  recordScore(score, limit) // offline-capable local mirror
+export async function submitScore(
+  score: number,
+  name?: string,
+  limit = 5,
+): Promise<ScoreEntry[]> {
+  recordScore(score, name, limit) // offline-capable local mirror
   try {
     const res = await fetch(ENDPOINT, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ score }),
+      body: JSON.stringify({ score, name }),
     })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return toEntries(await res.json(), limit)
