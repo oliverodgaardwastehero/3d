@@ -1,34 +1,50 @@
 import { useGLTF, useAnimations } from '@react-three/drei'
 import { useEffect, useRef } from 'react'
 import type { RefObject } from 'react'
-import { Group, LoopOnce, LoopRepeat, Mesh } from 'three'
+import { Group, LoopOnce, LoopRepeat, Mesh, MeshStandardMaterial } from 'three'
 
 const URL = '/models/waste-hero.glb'
 
+// Animation is driven entirely by baked GLB clips.
+//
+// HEADS UP: the clip NAMES in this GLB are mislabeled relative to their actual
+// motion (verified by foot-motion analysis), so each state points at the clip
+// whose CONTENT matches — not its name:
+//   'Walking'           → actually an IDLE  (feet planted, ~3.7s loop)
+//   'Step_in_High_Kick' → actually the WALK cycle
+//   'Idle_10'           → actually the RUN  (high foot-lift + long stride)
+//   'Running'           → actually the high KICK (one foot lifts way up)
+// If you re-export the model with corrected clip names, update this map to match.
 const ANIM_BY_STATE = {
-  idle: 'All_Night_Dance',
-  walking: 'Walking',
-  running: 'Running',
-  kick: 'Lunge_Spin_Kick',
+  idle: 'Walking',
+  walking: 'Step_in_High_Kick',
+  running: 'Idle_10',
+  kick: 'Running',
 } as const
 
 // Per-state playback speed multipliers. >1 plays faster.
 const TIME_SCALE_BY_STATE: Partial<Record<AvatarState, number>> = {
-  kick: 1.8,
+  kick: 1.5,
 }
 
-// Source clip durations in seconds at 1× speed.
+// Source clip durations in seconds at 1× speed (for the kick / one-shot states).
 const CLIP_DURATION = {
-  kick: 1.63,
+  kick: 1.3,
 } as const
+
+// Fraction of the kick clip at which the foot reaches the strike (measured).
+const KICK_CONTACT_FRACTION = 0.417
 
 export const KICK_DURATION = CLIP_DURATION.kick / (TIME_SCALE_BY_STATE.kick ?? 1)
 /**
- * Real-time seconds from kick keypress to the contact moment in the
- * animation. Used by Character to delay the NPC hit signal so the knockback
- * fires when the kick actually visually lands, not at the start of the wind-up.
+ * Real-time seconds from kick keypress to the contact moment in the animation.
+ * Character delays the NPC hit signal by this so the knockback fires when the
+ * strike visually lands, not on the wind-up. Derived from the clip's contact
+ * fraction — retune CLIP_DURATION / TIME_SCALE / KICK_CONTACT_FRACTION together
+ * when you swap in a new punch clip.
  */
-export const KICK_IMPACT_DELAY = 0.22
+export const KICK_IMPACT_DELAY =
+  (CLIP_DURATION.kick * KICK_CONTACT_FRACTION) / (TIME_SCALE_BY_STATE.kick ?? 1)
 
 export type AvatarState = keyof typeof ANIM_BY_STATE
 
@@ -52,14 +68,15 @@ export function Avatar({ state, bobRef }: Props) {
         const m = o as Mesh
         m.castShadow = true
         m.receiveShadow = false
+        const mat = m.material as MeshStandardMaterial
+        if (mat && 'envMapIntensity' in mat) mat.envMapIntensity = 0.6
       }
     })
 
-    // Mixamo clips bake the lunge / spin's root-bone translation into the
-    // animation — when we play it the visible mesh slides forward, then snaps
-    // back to the group's position at clip end. Strip every position track so
-    // the kick plays in place. Non-root bones don't have position tracks in
-    // Mixamo skeletons, so this is safe.
+    // Mixamo clips bake the root-bone translation into the animation — strip
+    // every position track so clips play in place (no forward slide / snap-back).
+    // Non-root bones don't have position tracks in Mixamo skeletons, so this is
+    // safe and also applies to any newly baked clips.
     for (const clip of animations) {
       clip.tracks = clip.tracks.filter((t) => !t.name.endsWith('.position'))
     }

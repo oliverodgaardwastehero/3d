@@ -11,6 +11,73 @@ Quick legend:
 
 ---
 
+## 2026-05-31 — quality + performance pass (shipped)
+
+Big multi-area pass. Verified in a real headless browser (puppeteer/swiftshader).
+
+**Assets / load**
+- ✅ GLB compressed with `gltf-transform optimize --compress meshopt --texture-compress webp`:
+  7.1 MB → **340 KB** (~95% smaller). No code change — `useGLTF` decodes meshopt by
+  default. All 4 clips + `KHR_materials_specular` preserved; kick plays in place.
+- ✅ `hero-mascot.png` 1.9 MB → `hero-mascot.jpg` **265 KB** + `decoding="async"`.
+  (Total first-load assets ~9 MB → ~0.6 MB.)
+- ✅ `antialias: false` (the EffectComposer already resolves 8× MSAA); removed the
+  duplicate Game-level fog (fog is now per-mode in World.tsx).
+
+**Punch / player animation** — supersedes #12
+- ✅ Hit timing fixed + decoupled from the wall clock: it fires off the render loop (was a
+  `setTimeout`), gated on `useDepot.phase === 'playing'` so a punch in flight can't knock a
+  standing NPC after the buzzer. Movement lock shortened; re-press allowed right after.
+  `KICK_IMPACT_DELAY` is derived from the clip's contact fraction — retune it when a new
+  punch clip is baked.
+- ℹ️ Animation is baked-clip-driven via `Avatar.tsx` `ANIM_BY_STATE`, now wired to the new
+  model's clips (idle/walk/run/kick all working; Space = kick). ⚠️ That GLB's clip NAMES are
+  mislabeled vs their actual motion (verified by foot-motion FK), so the map points each
+  state at the clip whose CONTENT matches — see the comment block in Avatar.tsx. Position
+  tracks are stripped on load so any root motion plays in place. `KICK_*` constants are tuned
+  to the new kick clip (1.30 s, contact at 0.417). (Procedural idle + arm-jab were prototyped
+  earlier, then removed in favor of baked clips.)
+- ✅ New model re-compressed with gltf-transform meshopt + WebP: **33.9 MB → 920 KB**. All
+  4 clips (Idle_10/Running/Step_in_High_Kick/Walking) + KHR_materials_specular preserved.
+  Re-run that command any time the model is re-exported (it always lands uncompressed).
+
+**Punch feedback**
+- ✅ Floating ✓ / ✗ over a punched NPC: green ✓ for a wrong-bin NPC (correct stop, +1),
+  red ✗ for a right-bin NPC (mistake, -1) — Billboard + Text rising + fading, mirroring the
+  bin deposit feedback (`WasteNPC.tsx`).
+
+**Lighting / look-dev**
+- ✅ Soft IBL via drei `<Environment>` (offline `<Lightformer>`s, no CDN) + `envMapIntensity`
+  on the player GLB; flat ambient → `<hemisphereLight>`; warm dusk key.
+- ✅ Soft, clean shadows: 2048 map + `normalBias 0.04` + frustum tightened to the yard. (#20)
+- ✅ Dusk `<Sky>` sun + sky-matched fog; gentle `BrightnessContrast`/`HueSaturation` grade.
+
+**NPCs** — supersedes #8 partially, #27
+- ✅ Shared module-level limb geometry + ~8 memoized materials per NPC (was ~13 fresh
+  geometries + ~13 materials each).
+- ✅ Connective shoulder-yoke + hip spheres (close the joint seams), eye-whites + pupils
+  + brows, softer roughness, desaturated shirts, thin `<Outlines>`, hair/glasses/body-girth
+  variety wired through from spawn.
+- ✅ Spawn scale-in (no pop), footfall bob + torso counter-twist, flailing knockdown.
+- ✅ Corpse shadow-kill on settle + corpse cap (≤ 8) so the late-match draw-call cliff is bounded. (#27)
+
+**City** — supersedes #18
+- ✅ Emissive window-grid (CanvasTexture map + emissiveMap, per-building UV-scaled geometry,
+  one shared material) so buildings read as a lit dusk skyline; two depth layers.
+- ✅ Visible chain-link fence (curb + alpha-tested panels + instanced posts + gate posts +
+  "CITY RECYCLING DEPOT" sign) where there was only an invisible collider.
+- ✅ Road + sidewalk ring outside the fence with a dashed centre line.
+- ✅ Large textured asphalt ground (260×260) out to the fog — fixes the bright-sky void where
+  the old apron ended. Carries a street grid (worn-lane bands + solid lane-edge lines +
+  instanced dashed centre lines, a near ring around the depot block + an outer ring for depth),
+  subtle asphalt tonal/crack variation, and a few manhole decals.
+
+**Still open / deferred:** #2 Avatar imperative play (P3 micro), #9 Math.hypot micro-opts,
+the bigger NPC-instancing refactor (only matters for Endless mode), bloom (deferred —
+windows read fine without it).
+
+---
+
 ## P1 — quick wins
 
 ### 1. NPC target indicator ❌ (tried + reverted 2026-05-20 — user preference)

@@ -10,16 +10,24 @@ import {
 import { WasteNPC, type WasteNPCInit } from './WasteNPC'
 
 const SKIN_COLORS = ['#f5d6b8', '#d6a87a', '#a8784a', '#7a5234', '#f0bf94']
+// Muted, slightly desaturated clothing — reads as fabric rather than toy plastic,
+// and a few neutrals so the crowd isn't all primary colors.
 const SHIRT_COLORS = [
-  '#ef4444',
-  '#22c55e',
-  '#3b82f6',
-  '#a855f7',
-  '#f59e0b',
-  '#ec4899',
-  '#14b8a6',
+  '#d4635c',
+  '#5aa06a',
+  '#5b86c9',
+  '#9d72c4',
+  '#d9a24a',
+  '#cc6f9b',
+  '#4a9b92',
+  '#6b7280',
+  '#5a6b8c',
+  '#8a7a52',
 ]
 const PANTS_COLORS = ['#3f3f46', '#1f2937', '#525252', '#475569', '#27272a']
+const HAIR_COLORS = ['#2b1d12', '#4a3520', '#1a1a1a', '#6e4a2a', '#8a8a8a', '#3a2418']
+/** Most corpses popping out behind the player is fine; cap how many stay mounted. */
+const MAX_CORPSES = 8
 
 function pick<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
@@ -63,6 +71,8 @@ export function DepotNPCManager() {
   // remain mounted in `npcs` for the rest of the match but don't gate spawns.
   const livingRef = useRef(0)
   const countedAsDoneRef = useRef<Set<number>>(new Set())
+  // FIFO of corpse ids still mounted; oldest is dropped past MAX_CORPSES.
+  const corpseIdsRef = useRef<number[]>([])
 
   useFrame((_, delta) => {
     const { phase, timeLeft } = useDepot.getState()
@@ -72,6 +82,7 @@ export function DepotNPCManager() {
         spawnTimerRef.current = 0
         livingRef.current = 0
         countedAsDoneRef.current.clear()
+        corpseIdsRef.current.length = 0
         setNpcs([])
         return
       }
@@ -103,6 +114,10 @@ export function DepotNPCManager() {
           skinColor: pick(SKIN_COLORS),
           shirtColor: pick(SHIRT_COLORS),
           pantsColor: pick(PANTS_COLORS),
+          hairColor: pick(HAIR_COLORS),
+          hasHair: Math.random() < 0.82,
+          hasGlasses: Math.random() < 0.28,
+          girth: randInRange(0.9, 1.22),
           scale: randInRange(0.9, 1.12),
           walkPhaseOffset: Math.random() * Math.PI * 2,
         },
@@ -121,6 +136,13 @@ export function DepotNPCManager() {
   const handleFall = useCallback(
     (id: number) => {
       markDone(id)
+      // Keep the body as a corpse, but cap how many accumulate — drop the
+      // oldest once we exceed MAX_CORPSES so draw calls stay bounded.
+      corpseIdsRef.current.push(id)
+      if (corpseIdsRef.current.length > MAX_CORPSES) {
+        const drop = corpseIdsRef.current.shift()
+        if (drop !== undefined) setNpcs((prev) => prev.filter((n) => n.id !== drop))
+      }
     },
     [markDone],
   )

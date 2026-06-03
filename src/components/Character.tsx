@@ -34,6 +34,15 @@ export function Character({ positionRef, spawn = [0, 0], initialFacing = Math.PI
   const wasKickDown = useRef(false)
   const action = useRef<Action | null>(null)
   const facing = useRef(initialFacing)
+  // Buffered punch hit: captured on press, fired when the jab lands (on the
+  // render clock, not wall time).
+  const pendingHit = useRef<{
+    x: number
+    z: number
+    fx: number
+    fz: number
+    at: number
+  } | null>(null)
   const [, getKeys] = useKeyboardControls<ControlName>()
   const { camera } = useThree()
 
@@ -86,28 +95,33 @@ export function Character({ positionRef, spawn = [0, 0], initialFacing = Math.PI
       }
 
       const kickPressed = kick && !wasKickDown.current
-      // Reject re-press during an active kick so a held / spammed Space doesn't
-      // queue extra delayed hits while the avatar is mid-animation.
+      // Reject re-press during the short active window so a held / spammed Space
+      // doesn't queue extra hits mid-punch; the lock is brief so re-press works
+      // again right after the recovery.
       if (kickPressed && action.current?.state !== 'kick') {
         action.current = { state: 'kick', until: now + KICK_DURATION * 1000 }
-        const fx = Math.sin(facing.current)
-        const fz = Math.cos(facing.current)
-        const hitX = group.position.x
-        const hitZ = group.position.z
-        // Fire the NPC hit signal when the kick visually connects, not on
-        // the wind-up frame.
-        window.setTimeout(() => {
-          useDepot.getState().registerPunch({
-            x: hitX,
-            z: hitZ,
-            fx,
-            fz,
-          })
-        }, KICK_IMPACT_DELAY * 1000)
+        pendingHit.current = {
+          x: group.position.x,
+          z: group.position.z,
+          fx: Math.sin(facing.current),
+          fz: Math.cos(facing.current),
+          at: now + KICK_IMPACT_DELAY * 1000,
+        }
       }
       wasKickDown.current = kick
+
+      // Fire the buffered hit when the punch lands. Gated on the live match
+      // phase so a punch in flight can't knock a standing NPC after the buzzer.
+      if (pendingHit.current && now >= pendingHit.current.at) {
+        const h = pendingHit.current
+        pendingHit.current = null
+        if (useDepot.getState().phase === 'playing') {
+          useDepot.getState().registerPunch({ x: h.x, z: h.z, fx: h.fx, fz: h.fz })
+        }
+      }
     } else {
       wasKickDown.current = false
+      pendingHit.current = null
     }
 
     group.position.y = GROUND_Y

@@ -1,6 +1,7 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useRef } from 'react'
-import { Group, MathUtils, Vector3 } from 'three'
+import { useEffect, useRef, useState } from 'react'
+import { Group, MathUtils, Mesh, Vector3 } from 'three'
+import { Billboard, Text } from '@react-three/drei'
 import { binById, GAME, type WasteType } from '../../lib/depotLayout'
 import { useDepot } from '../../lib/depotState'
 import { registerNPCBody } from '../../lib/npcBodies'
@@ -12,6 +13,13 @@ const NPC_BODY_RADIUS = 0.5
 const FALL_DURATION = 0.55 // seconds for the tip-over animation
 const KNOCKBACK_DISTANCE = 2.0 // meters the body slides while falling
 
+// Floating ✓ / ✗ shown over a punched NPC.
+const FB_DURATION = 1.0 // seconds
+const FB_START_Y = 2.0
+const FB_END_Y = 3.3
+const FB_GOOD_COLOR = '#34d399' // punched a wrong-bin NPC (good stop)
+const FB_BAD_COLOR = '#f87171' // punched a right-bin NPC (mistake)
+
 export type WasteNPCInit = {
   id: number
   startX: number
@@ -22,6 +30,11 @@ export type WasteNPCInit = {
   skinColor: string
   shirtColor: string
   pantsColor: string
+  hairColor: string
+  hasHair: boolean
+  hasGlasses: boolean
+  /** Torso/shoulder width multiplier for body-type variety. */
+  girth: number
   /** Body scale jitter (0.9 – 1.1) so the crowd feels varied. */
   scale: number
   /** Starting walk-cycle phase so all NPCs aren't lockstep. */
@@ -45,6 +58,10 @@ export function WasteNPC({
   skinColor,
   shirtColor,
   pantsColor,
+  hairColor,
+  hasHair,
+  hasGlasses,
+  girth,
   scale,
   walkPhaseOffset,
   onRemove,
@@ -52,11 +69,22 @@ export function WasteNPC({
 }: Props) {
   const groupRef = useRef<Group>(null)
   const pitchRef = useRef<Group>(null)
+  const bobRef = useRef<Group>(null)
   const itemRef = useRef<Group>(null)
   const leftArmRef = useRef<Group>(null)
   const rightArmRef = useRef<Group>(null)
   const leftLegRef = useRef<Group>(null)
   const rightLegRef = useRef<Group>(null)
+  // Spawn scale-in progress (0 → 1) and a one-shot guard for disabling corpse
+  // shadow casting once the body has settled.
+  const spawnT = useRef(0)
+  const shadowsOff = useRef(false)
+
+  // Floating ✓/✗ feedback shown when this NPC is punched.
+  const [punchFb, setPunchFb] = useState<'good' | 'bad' | null>(null)
+  const fbGroupRef = useRef<Group>(null)
+  const fbTextRef = useRef<Mesh>(null)
+  const fbStart = useRef(0)
 
   const phase = useRef<Phase>('approaching')
   const phaseT = useRef(0)
@@ -74,7 +102,7 @@ export function WasteNPC({
     if (!g) return
     g.position.set(startX, 0, startZ)
     g.rotation.y = Math.PI / 2 // face +X (east) toward bins
-    g.scale.setScalar(scale)
+    g.scale.setScalar(scale * 0.6) // grows to full in the frame loop (spawn pop-in fix)
     facing.current = Math.PI / 2
   }, [startX, startZ, scale])
 
@@ -124,11 +152,16 @@ export function WasteNPC({
       g.rotation.y = knockFacing
 
       onFall?.(id)
-      if (targetBinId !== wasteType) {
+      // Wrong-bin NPC → punching them is the correct play (✓, +1). Right-bin
+      // NPC → you stopped a good citizen (✗, -1).
+      const goodPunch = targetBinId !== wasteType
+      if (goodPunch) {
         useDepot.getState().registerWrongStop()
       } else {
         useDepot.getState().registerRightStop()
       }
+      fbStart.current = performance.now()
+      setPunchFb(goodPunch ? 'good' : 'bad')
     })
     return unsub
   }, [id, onFall, targetBinId, wasteType])
@@ -138,6 +171,13 @@ export function WasteNPC({
     if (!g) return
     const dt = Math.min(delta, 0.05)
     phaseT.current += dt
+
+    // Spawn scale-in so NPCs grow in at the gate instead of popping to full size.
+    if (spawnT.current < 1) {
+      spawnT.current = Math.min(1, spawnT.current + dt / 0.35)
+      const e = spawnT.current * spawnT.current * (3 - 2 * spawnT.current)
+      g.scale.setScalar(scale * (0.6 + 0.4 * e))
+    }
 
     const target = binById(targetBinId)
 
@@ -198,6 +238,22 @@ export function WasteNPC({
       if (pitchRef.current) {
         pitchRef.current.rotation.x = (eased * Math.PI) / 2
       }
+      // Limbs flail as the body tips so it reads as a knockdown, not a plank.
+      if (leftArmRef.current) {
+        leftArmRef.current.rotation.x = 1.5 * eased
+        leftArmRef.current.rotation.z = -ARM_REST_Z - 0.5 * eased
+      }
+      if (rightArmRef.current) {
+        rightArmRef.current.rotation.x = 1.2 * eased
+        rightArmRef.current.rotation.z = ARM_REST_Z + 0.6 * eased
+      }
+      if (leftLegRef.current) leftLegRef.current.rotation.x = 0.8 * eased
+      if (rightLegRef.current) rightLegRef.current.rotation.x = -0.5 * eased
+      // Cancel the walk bob so the corpse lies flat.
+      if (bobRef.current) {
+        bobRef.current.position.y = 0
+        bobRef.current.rotation.y = 0
+      }
       // Knockback slide: ease-out cubic from 0 to KNOCKBACK_DISTANCE over the
       // fall window. Applied as a per-frame delta so we never overshoot.
       const slideEased = 1 - Math.pow(1 - t, 3)
@@ -208,6 +264,15 @@ export function WasteNPC({
       g.position.z += knockDirZ.current * deltaSlide
       if (t >= 1) {
         phase.current = 'fallen'
+        // A grounded corpse contributes nothing useful to the shadow pass —
+        // drop its shadow casters (~half its render cost) for the rest of the match.
+        if (!shadowsOff.current) {
+          shadowsOff.current = true
+          g.traverse((o) => {
+            const m = o as Mesh
+            if (m.isMesh) m.castShadow = false
+          })
+        }
       }
     }
     // 'fallen' is intentionally a no-op — body stays where it dropped.
@@ -259,6 +324,32 @@ export function WasteNPC({
       const legSwing = legsSwinging ? swing : 0
       if (leftLegRef.current) leftLegRef.current.rotation.x = legSwing * 0.9
       if (rightLegRef.current) rightLegRef.current.rotation.x = -legSwing * 0.9
+
+      // Footfall bounce + torso counter-twist so the walk doesn't glide flat.
+      if (bobRef.current) {
+        if (legsSwinging) {
+          bobRef.current.position.y = Math.abs(Math.sin(walkPhase.current * 2)) * 0.04
+          bobRef.current.rotation.y = Math.sin(walkPhase.current) * 0.06
+        } else {
+          bobRef.current.position.y = 0
+          bobRef.current.rotation.y = 0
+        }
+      }
+    }
+
+    // Floating ✓/✗ over a punched NPC: rise + fade.
+    if (fbStart.current > 0 && fbGroupRef.current) {
+      const ft = MathUtils.clamp(
+        (performance.now() - fbStart.current) / (FB_DURATION * 1000),
+        0,
+        1,
+      )
+      const eased = 1 - Math.pow(1 - ft, 3)
+      fbGroupRef.current.visible = ft < 1
+      fbGroupRef.current.position.y = MathUtils.lerp(FB_START_Y, FB_END_Y, eased)
+      const mat = fbTextRef.current?.material as { opacity?: number } | undefined
+      if (mat) mat.opacity = ft < 0.12 ? ft / 0.12 : 1 - (ft - 0.12) / 0.88
+      if (ft >= 1) fbStart.current = 0
     }
   })
 
@@ -269,6 +360,12 @@ export function WasteNPC({
           skinColor={skinColor}
           shirtColor={shirtColor}
           pantsColor={pantsColor}
+          hairColor={hairColor}
+          hasHair={hasHair}
+          hasGlasses={hasGlasses}
+          girth={girth}
+          outline
+          bobRef={bobRef}
           leftArmRef={leftArmRef}
           rightArmRef={rightArmRef}
           leftLegRef={leftLegRef}
@@ -278,6 +375,28 @@ export function WasteNPC({
           <WasteItem type={wasteType} />
         </group>
       </group>
+
+      {/* Floating ✓ / ✗ shown once when this NPC is punched. Sits above the body
+          (outside pitchRef so it stays upright while the corpse tips + slides). */}
+      {punchFb && (
+        <group ref={fbGroupRef} position={[0, FB_START_Y, 0]}>
+          <Billboard>
+            <Text
+              ref={fbTextRef}
+              fontSize={1.0}
+              color={punchFb === 'good' ? FB_GOOD_COLOR : FB_BAD_COLOR}
+              anchorX="center"
+              anchorY="middle"
+              outlineWidth={0.07}
+              outlineColor="#0a0a0a"
+              material-transparent
+              material-toneMapped={false}
+            >
+              {punchFb === 'good' ? '✓' : '✗'}
+            </Text>
+          </Billboard>
+        </group>
+      )}
     </group>
   )
 }

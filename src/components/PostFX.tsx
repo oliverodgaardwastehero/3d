@@ -1,14 +1,23 @@
-import { EffectComposer, Vignette } from '@react-three/postprocessing'
+import {
+  BrightnessContrast,
+  EffectComposer,
+  HueSaturation,
+  Vignette,
+} from '@react-three/postprocessing'
 
 /**
- * Lightweight post-processing. Bloom was too expensive for the open scene;
- * sticking with vignette only for now. The garage bulb glow is faked with the
- * mesh's emissive material plus the warm point light, no bloom needed.
+ * Lightweight post-processing. The renderer already tone-maps (ACES) and the
+ * composer resolves 8x MSAA, so this is just a gentle grade: a touch of
+ * contrast + saturation and a soft vignette. Bloom is intentionally omitted —
+ * it was too expensive for the open scene and the dusk windows read fine without
+ * it. Keep these cheap (~sub-millisecond) effects only.
  */
 export function PostFX() {
   return (
     <EffectComposer>
-      <Vignette eskil={false} offset={0.2} darkness={0.55} />
+      <BrightnessContrast brightness={0.015} contrast={0.07} />
+      <HueSaturation saturation={0.07} />
+      <Vignette eskil={false} offset={0.22} darkness={0.5} />
     </EffectComposer>
   )
 }
