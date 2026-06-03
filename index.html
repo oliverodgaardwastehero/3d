@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>WhipApp — Waste Hero</title>
+    <!-- Title-screen assets: start them at parse time so the screen paints
+         instantly with no image pop-in or font-swap flash. -->
+    <link rel="preload" as="image" href="/hero-bg.avif" type="image/avif" fetchpriority="high" />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/open-runde-600.woff2" crossorigin />
+    <link rel="preload" as="font" type="font/woff2" href="/fonts/open-runde-700.woff2" crossorigin />
   </head>
   <body>
     <div id="root"></div>

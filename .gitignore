@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Heavy source renders + unsubset font masters used by `npm run optimize:title`.
+# The optimized AVIF/WebP + subset woff2 outputs are committed under public/.
+design-assets/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

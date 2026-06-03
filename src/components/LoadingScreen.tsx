@@ -1,27 +1,30 @@
 import { useProgress } from '@react-three/drei'
 import { useEffect, useState } from 'react'
 import { useGame } from '../lib/store'
-import { loadBestScore } from '../lib/highScore'
 
 type Props = {
   onBegin: () => void
 }
 
-type MenuKey = 'begin' | 'how' | 'credits'
+const FONT_STACK = "'Open Runde', system-ui, -apple-system, 'Segoe UI', sans-serif"
 
 /**
- * Title screen modeled after The Legend of Zelda: Breath of the Wild —
- * full-bleed hero artwork, centered title at the top, a right-aligned
- * menu in the middle, and small corner info.
+ * Title screen for "Defend the Waste Fractions", built to match the
+ * WasteHero design-system Figma frame (node 1174:2989): full-bleed hero
+ * artwork, the WasteHero wordmark eyebrow, the two-tone vector title, a
+ * punchy subtitle, a keycap control legend, and the blue Start game CTA.
+ *
+ * The title, wordmark and keycaps ship as pre-rendered SVGs from the design
+ * system, so the licensed display fonts are baked into vectors and only the
+ * free Open Runde face is loaded for UI text.
  */
 export function LoadingScreen({ onBegin }: Props) {
   const { progress, active, total } = useProgress()
   const hasStarted = useGame((s) => s.hasStarted)
   const [hidden, setHidden] = useState(false)
   const [graceElapsed, setGraceElapsed] = useState(false)
-  const [bestScore, setBestScore] = useState<number | null>(() => loadBestScore())
-  const [hovered, setHovered] = useState<MenuKey>('begin')
 
+  // Brief grace window so a sub-frame load doesn't flash the CTA as ready.
   useEffect(() => {
     const id = window.setTimeout(() => setGraceElapsed(true), 350)
     return () => window.clearTimeout(id)
@@ -30,180 +33,124 @@ export function LoadingScreen({ onBegin }: Props) {
   useEffect(() => {
     if (!hasStarted) {
       setHidden(false)
-      setBestScore(loadBestScore())
       return
     }
     const id = window.setTimeout(() => setHidden(true), 600)
     return () => window.clearTimeout(id)
   }, [hasStarted])
 
-  if (hidden) return null
-
   const nothingToLoad = total === 0
   const ready = graceElapsed && !active && (nothingToLoad || progress >= 100)
+
+  // Enter starts the game once everything is loaded (Space is the in-game kick).
+  useEffect(() => {
+    if (!ready || hasStarted) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        onBegin()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ready, hasStarted, onBegin])
+
+  if (hidden) return null
 
   return (
     <div
       className={[
-        'pointer-events-auto absolute inset-0 z-50 overflow-hidden',
-        'bg-zinc-950 transition-opacity duration-500',
+        'pointer-events-auto absolute inset-0 z-50 flex flex-col overflow-hidden',
+        'bg-[#1b2344] transition-opacity duration-500',
         hasStarted ? 'opacity-0' : 'opacity-100',
       ].join(' ')}
+      style={{ fontFamily: FONT_STACK }}
     >
-      {/* Full-bleed hero background */}
-      <img
-        src="/hero-mascot.png"
-        alt=""
-        className="intro-bg pointer-events-none absolute inset-0 h-full w-full select-none object-cover"
-      />
+      {/* Full-bleed hero artwork, anchored to the bottom so the action stays in
+          frame. AVIF with a WebP fallback — every WebGL2 browser supports WebP. */}
+      <picture className="intro-bg pointer-events-none absolute inset-0 block h-full w-full select-none">
+        <source srcSet="/hero-bg.avif" type="image/avif" />
+        <img
+          src="/hero-bg.webp"
+          alt=""
+          decoding="async"
+          fetchPriority="high"
+          className="h-full w-full object-cover object-bottom"
+        />
+      </picture>
 
-      {/* Atmospheric dim — top + bottom vignette so title + menu pop */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_center,_transparent_45%,_rgba(0,0,0,0.55))]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[40vh] bg-gradient-to-b from-zinc-950/65 via-zinc-950/15 to-transparent" />
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[24vh] bg-gradient-to-t from-zinc-950/55 via-zinc-950/10 to-transparent" />
-
-      {/* Top-center title */}
-      <div className="absolute inset-x-0 top-[7vh] flex flex-col items-center px-6 text-center">
-        <div className="zelda-eyebrow text-[10px] uppercase tracking-[0.5em] text-amber-200/80">
-          Waste Hero presents
+      {/* ── Top: eyebrow + title + subtitle ───────────────────────────── */}
+      <header className="relative flex flex-col items-center gap-5 px-6 pt-[clamp(1.5rem,5vh,3rem)] text-center sm:gap-7">
+        {/* "A  WasteHero  original" */}
+        <div className="ts-rise flex items-center justify-center gap-3 text-white">
+          <span className="text-[clamp(0.8rem,1.4vw,1.25rem)] font-semibold">A</span>
+          <img
+            src="/ws-logo-text.svg"
+            alt="WasteHero"
+            className="h-[clamp(18px,1.7vw,24px)] w-auto"
+          />
+          <span className="text-[clamp(0.8rem,1.4vw,1.25rem)] font-semibold">original</span>
         </div>
-        <h1
-          className="zelda-title mt-3 text-5xl font-light uppercase leading-[0.95] tracking-[0.12em] text-zinc-50 sm:text-7xl md:text-[5.5rem]"
-          style={{
-            textShadow:
-              '0 2px 26px rgba(0,0,0,0.7), 0 0 60px rgba(244, 208, 64, 0.18)',
-          }}
+
+        {/* Two-tone vector title with baked-in navy drop shadow */}
+        <img
+          src="/logo.svg"
+          alt="Defend the Waste Fractions"
+          className="ts-title h-auto w-[clamp(336px,82vw,1056px)] select-none"
+        />
+
+        {/* Subtitle */}
+        <p
+          className="ts-rise max-w-[min(680px,90vw)] text-[clamp(0.9rem,1.45vw,1.25rem)] font-semibold leading-relaxed text-white"
+          style={{ textShadow: '0 4px 8px rgba(27,35,68,0.9)', animationDelay: '120ms' }}
         >
-          Defend the
-          <br />
-          <span className="font-extralight text-amber-200">Waste Fractions</span>
-        </h1>
-        <div className="zelda-subtitle mt-5 text-[11px] uppercase tracking-[0.42em] text-zinc-300/85">
-          A 60-second sorting drill
+          Some people have no concept of what waste goes in the right containers.
+          Help them understand by kicking them in the face!
+        </p>
+      </header>
+
+      <div className="flex-1" />
+
+      {/* ── Bottom: control legend + Start game ───────────────────────── */}
+      <footer className="relative flex flex-col items-center gap-[clamp(1.25rem,3.5vh,3rem)] px-6 pb-[clamp(1.5rem,5vh,3rem)]">
+        <div className="ts-rise flex flex-wrap items-center justify-center gap-x-[clamp(1.25rem,3vw,3rem)] gap-y-3 text-white" style={{ animationDelay: '220ms' }}>
+          <ControlHint label="Move" icon="/move.svg" />
+          <ControlHint label="Run" icon="/run.svg" />
+          <ControlHint label="Eco kick" icon="/kick.svg" />
         </div>
-      </div>
 
-      {/* Right-aligned menu */}
-      <div className="absolute inset-y-0 right-[6vw] flex flex-col items-end justify-center gap-1.5 text-right text-zinc-100">
-        <MenuItem
-          label="Begin"
-          enabled={ready}
-          hovered={hovered === 'begin'}
-          onHover={() => setHovered('begin')}
-          onClick={ready ? onBegin : undefined}
-          delayMs={1100}
-        />
-        <MenuItem
-          label="How to play"
-          enabled={false}
-          hovered={hovered === 'how'}
-          onHover={() => setHovered('how')}
-          delayMs={1250}
-        />
-        <MenuItem
-          label="Credits"
-          enabled={false}
-          hovered={hovered === 'credits'}
-          onHover={() => setHovered('credits')}
-          delayMs={1400}
-        />
-
-        {!ready && (
-          <div className="mt-5 flex w-44 flex-col items-end gap-2 text-[10px] uppercase tracking-[0.32em] text-zinc-400">
-            <div className="h-px w-full overflow-hidden bg-zinc-700">
-              <div
-                className="h-full bg-amber-300 transition-[width] duration-200 ease-out"
-                style={{ width: `${Math.max(2, progress)}%` }}
-              />
-            </div>
-            <span>Loading {Math.round(progress)}%</span>
-          </div>
-        )}
-      </div>
-
-      {/* Bottom-left: best score */}
-      <div className="zelda-corner absolute bottom-6 left-6 text-[10px] uppercase tracking-[0.35em] text-zinc-300/80">
-        {bestScore != null ? (
-          <>
-            Personal Best{' '}
-            <span className="font-semibold text-amber-200">
-              {bestScore >= 0 ? `+${bestScore}` : bestScore}
-            </span>
-          </>
-        ) : (
-          'No record yet'
-        )}
-      </div>
-
-      {/* Bottom-right: control hint */}
-      <div className="zelda-corner absolute bottom-6 right-6 text-[10px] uppercase tracking-[0.32em] text-zinc-400">
-        WASD walk · Shift run · Space kick
-      </div>
+        <div className="ts-pop">
+          <button
+            type="button"
+            onClick={ready ? onBegin : undefined}
+            disabled={!ready}
+            className={[
+              'flex items-center justify-center rounded-[12px] bg-[#75bdea] p-6',
+              'text-xl font-semibold leading-[0.75] whitespace-nowrap text-[#1b2344]',
+              'transition-[filter,opacity] duration-150',
+              ready
+                ? 'cursor-pointer hover:brightness-105 active:brightness-95'
+                : 'cursor-default opacity-70',
+            ].join(' ')}
+          >
+            {ready ? 'Start game' : `Loading ${Math.round(progress)}%`}
+          </button>
+        </div>
+      </footer>
     </div>
   )
 }
 
-type MenuItemProps = {
+type ControlHintProps = {
   label: string
-  enabled: boolean
-  hovered: boolean
-  onHover: () => void
-  onClick?: () => void
-  delayMs: number
+  icon: string
 }
 
-function MenuItem({
-  label,
-  enabled,
-  hovered,
-  onHover,
-  onClick,
-  delayMs,
-}: MenuItemProps) {
-  const interactive = enabled && !!onClick
-  const isHighlighted = interactive && hovered
+function ControlHint({ label, icon }: ControlHintProps) {
   return (
-    <button
-      type="button"
-      onMouseEnter={onHover}
-      onFocus={onHover}
-      onClick={onClick}
-      disabled={!interactive}
-      className={[
-        'zelda-menu-item group relative flex items-center gap-3 px-3 py-2 text-base uppercase tracking-[0.32em] transition-all',
-        interactive
-          ? 'cursor-pointer'
-          : 'cursor-not-allowed opacity-35',
-        isHighlighted
-          ? 'text-amber-100'
-          : interactive
-            ? 'text-zinc-200 hover:text-amber-100'
-            : 'text-zinc-400',
-      ].join(' ')}
-      style={{
-        animationDelay: `${delayMs}ms`,
-        textShadow: '0 2px 14px rgba(0,0,0,0.7)',
-      }}
-    >
-      {/* Hover marker — small left chevron */}
-      <span
-        aria-hidden
-        className={[
-          'h-px w-6 origin-right bg-amber-200 transition-all duration-300',
-          isHighlighted ? 'opacity-100' : 'opacity-0',
-        ].join(' ')}
-      />
-      <span className="relative">
-        {label}
-        {/* Underline grows on hover */}
-        <span
-          aria-hidden
-          className={[
-            'absolute -bottom-1 right-0 h-px bg-amber-200/70 transition-all duration-300',
-            isHighlighted ? 'w-full' : 'w-0',
-          ].join(' ')}
-        />
-      </span>
-    </button>
+    <div className="flex items-center gap-3 sm:gap-4">
+      <span className="text-[clamp(0.8rem,1.1vw,1rem)] font-bold whitespace-nowrap">{label}</span>
+      <img src={icon} alt="" className="h-[clamp(26px,2.6vw,34px)] w-auto select-none" />
+    </div>
   )
 }
