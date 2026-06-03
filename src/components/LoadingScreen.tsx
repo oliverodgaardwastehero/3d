@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useGame } from '../lib/store'
 import { loadTopScores, type ScoreEntry } from '../lib/highScore'
 import { fetchTopScores } from '../lib/leaderboard'
+import { Keycap, ArrowKeys } from './Keycap'
 
 type Props = {
   onBegin: () => void
@@ -129,31 +130,69 @@ export function LoadingScreen({ onBegin }: Props) {
 
       {/* ── Bottom: control legend + Start game ───────────────────────── */}
       <footer className="relative flex flex-col items-center gap-[clamp(1.25rem,3.5vh,3rem)] px-6 pb-[clamp(1.5rem,5vh,3rem)]">
-        <div className="ts-rise flex flex-wrap items-center justify-center gap-x-[clamp(1.25rem,3vw,3rem)] gap-y-3 text-white" style={{ animationDelay: '220ms' }}>
-          <ControlHint label="Move" icon="/move.svg" />
-          <ControlHint label="Run" icon="/run.svg" />
-          <ControlHint label="Eco kick" icon="/kick.svg" />
+        <div className="ts-rise flex flex-wrap items-center justify-center gap-x-[clamp(1.5rem,3vw,3rem)] gap-y-3 text-white" style={{ animationDelay: '220ms' }}>
+          <ControlHint label="Move">
+            <ArrowKeys />
+          </ControlHint>
+          <ControlHint label="Run">
+            <Keycap>Shift</Keycap>
+          </ControlHint>
+          <ControlHint label="Eco kick">
+            <Keycap>Space</Keycap>
+          </ControlHint>
         </div>
 
-        <div className="ts-pop">
+        <div className="ts-pop relative isolate">
+          {/* Breathing cyan halo — appears the moment the game is ready, which
+              is itself the "comes alive" beat. `isolate` keeps the -z-10 halo
+              scoped to this wrapper (above the full-screen hero, behind the CTA). */}
+          {ready && (
+            <span
+              aria-hidden
+              className="ts-cta-glow pointer-events-none absolute inset-0 -z-10 rounded-[16px] bg-[#75bdea] blur-2xl"
+            />
+          )}
           <button
             type="button"
             onClick={ready ? onBegin : undefined}
             disabled={!ready}
             className={[
-              'flex items-center justify-center rounded-[12px] bg-[#75bdea] p-6',
-              'text-xl font-semibold leading-[0.75] whitespace-nowrap text-[#1b2344]',
-              'transition-[filter,opacity] duration-150',
+              'relative flex items-center justify-center gap-3 overflow-hidden rounded-[14px] bg-[#75bdea] px-9 py-5',
+              'text-lg font-extrabold uppercase tracking-[0.12em] whitespace-nowrap text-[#13203f]',
+              'shadow-[0_6px_0_#1f4a66] transition-[transform,filter,box-shadow] duration-150',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1b2344]',
               ready
-                ? 'cursor-pointer hover:brightness-105 active:brightness-95'
-                : 'cursor-default opacity-70',
+                ? 'cursor-pointer hover:-translate-y-0.5 hover:brightness-105 hover:shadow-[0_8px_0_#1f4a66] active:translate-y-1 active:shadow-[0_2px_0_#1f4a66] active:brightness-95'
+                : 'cursor-default opacity-70 shadow-[0_4px_0_#1f4a66]',
             ].join(' ')}
           >
-            {ready
-              ? 'Start game'
-              : loadProgress > 0
-                ? `Loading ${Math.round(loadProgress)}%`
-                : 'Loading…'}
+            {/* Subtle progress fill so the wait reads as intentional. */}
+            {!ready && loadProgress > 0 && (
+              <span
+                aria-hidden
+                className="absolute inset-y-0 left-0 bg-white/20 transition-[width] duration-300"
+                style={{ width: `${loadProgress}%` }}
+              />
+            )}
+            {/* Periodic light sweep when ready. */}
+            {ready && (
+              <span
+                aria-hidden
+                className="ts-cta-sheen pointer-events-none absolute inset-0 bg-gradient-to-r from-transparent via-white/35 to-transparent"
+              />
+            )}
+            <span className="relative z-10 flex items-center gap-3">
+              {ready && (
+                <svg viewBox="0 0 24 24" className="h-5 w-5" fill="currentColor" aria-hidden>
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              )}
+              {ready
+                ? 'Start game'
+                : loadProgress > 0
+                  ? `Loading ${Math.round(loadProgress)}%`
+                  : 'Loading…'}
+            </span>
           </button>
         </div>
       </footer>
@@ -242,14 +281,14 @@ function Leaderboard({ scores }: { scores: ScoreEntry[] }) {
 
 type ControlHintProps = {
   label: string
-  icon: string
+  children: ReactNode
 }
 
-function ControlHint({ label, icon }: ControlHintProps) {
+function ControlHint({ label, children }: ControlHintProps) {
   return (
     <div className="flex items-center gap-3 sm:gap-4">
+      {children}
       <span className="text-[clamp(0.8rem,1.1vw,1rem)] font-bold whitespace-nowrap">{label}</span>
-      <img src={icon} alt="" className="h-[clamp(26px,2.6vw,34px)] w-auto select-none" />
     </div>
   )
 }
