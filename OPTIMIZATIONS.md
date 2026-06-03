@@ -11,6 +11,28 @@ Quick legend:
 
 ---
 
+## 2026-06-03 — title-screen critical-path split (shipped)
+
+The start screen is pure DOM/CSS, but `main → App → Game` statically imported the
+whole WebGL stack, so the title couldn't paint until **1.53 MB / 465 KB gzip** of
+three + @react-three/* + postprocessing downloaded, parsed and executed.
+
+- ✅ Extracted the `<Canvas>` subtree (KeyboardControls + Canvas + World + PostFX)
+  into `Scene.tsx` and pulled it in with `React.lazy(() => import('./Scene'))`.
+  three.js is now reachable only through the dynamic import, so Rollup isolates it.
+  **Entry chunk 1.53 MB → 215 KB (465 → 68 KB gzip; ~85% smaller, 0 renderer code.)**
+  The 1.28 MB Scene chunk streams in the background and the import fires on first
+  render, so it loads in parallel with the title instead of blocking first paint.
+- ✅ Decoupled `LoadingScreen` from drei. drei's `useProgress` now runs inside the
+  lazy chunk (`LoadReporter`) and mirrors `{loadProgress, assetsReady}` into the
+  zustand store; the title screen reads those — zero WebGL code on the title path.
+  Live "Loading N%" + instant-Start preload (player GLB still preloads during the
+  title via `useGLTF.preload`) are preserved.
+- Verified: `tsc -b` clean, headless-Chrome/SwiftShader screenshot shows the title
+  rendering and the Start CTA reaching its ready state (load bridge works e2e).
+
+---
+
 ## 2026-05-31 — quality + performance pass (shipped)
 
 Big multi-area pass. Verified in a real headless browser (puppeteer/swiftshader).

@@ -9,9 +9,17 @@ type GameState = {
   currentChapter: ChapterId | null
   visitedChapters: Set<ChapterId>
 
+  // Title-screen load state, reported up from the lazily-loaded 3D Scene chunk
+  // (drei lives in that chunk, so the DOM title screen can't read useProgress
+  // directly). loadProgress drives the "Loading N%" label; assetsReady gates
+  // the Start CTA once the player GLB has finished preloading.
+  loadProgress: number
+  assetsReady: boolean
+
   start: (mode: GameMode) => void
   resetToMenu: () => void
   setCurrentChapter: (id: ChapterId | null) => void
+  setLoad: (progress: number, assetsReady: boolean) => void
 }
 
 export const useGame = create<GameState>((set, get) => ({
@@ -19,6 +27,8 @@ export const useGame = create<GameState>((set, get) => ({
   gameMode: null,
   currentChapter: null,
   visitedChapters: new Set(),
+  loadProgress: 0,
+  assetsReady: false,
 
   start: (mode) => {
     if (get().hasStarted) return
@@ -27,6 +37,12 @@ export const useGame = create<GameState>((set, get) => ({
 
   resetToMenu: () => {
     set({ hasStarted: false, gameMode: null, currentChapter: null })
+  },
+
+  setLoad: (progress, assetsReady) => {
+    const s = get()
+    if (s.loadProgress === progress && s.assetsReady === assetsReady) return
+    set({ loadProgress: progress, assetsReady })
   },
 
   setCurrentChapter: (id) => {

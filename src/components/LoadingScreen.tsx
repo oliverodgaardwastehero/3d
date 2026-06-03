@@ -1,4 +1,3 @@
-import { useProgress } from '@react-three/drei'
 import { useEffect, useState } from 'react'
 import { useGame } from '../lib/store'
 import { loadTopScores, type ScoreEntry } from '../lib/highScore'
@@ -21,8 +20,11 @@ const FONT_STACK = "'Open Runde', system-ui, -apple-system, 'Segoe UI', sans-ser
  * free Open Runde face is loaded for UI text.
  */
 export function LoadingScreen({ onBegin }: Props) {
-  const { progress, active, total } = useProgress()
   const hasStarted = useGame((s) => s.hasStarted)
+  // Load state is reported up from the lazily-loaded Scene chunk (drei lives
+  // there), so the title screen itself pulls in zero WebGL code.
+  const loadProgress = useGame((s) => s.loadProgress)
+  const assetsReady = useGame((s) => s.assetsReady)
   const [hidden, setHidden] = useState(false)
   const [graceElapsed, setGraceElapsed] = useState(false)
   const [topScores, setTopScores] = useState<ScoreEntry[]>(() => loadTopScores())
@@ -50,8 +52,7 @@ export function LoadingScreen({ onBegin }: Props) {
     }
   }, [hasStarted])
 
-  const nothingToLoad = total === 0
-  const ready = graceElapsed && !active && (nothingToLoad || progress >= 100)
+  const ready = graceElapsed && assetsReady
 
   // Enter starts the game once everything is loaded (Space is the in-game kick).
   useEffect(() => {
@@ -148,7 +149,11 @@ export function LoadingScreen({ onBegin }: Props) {
                 : 'cursor-default opacity-70',
             ].join(' ')}
           >
-            {ready ? 'Start game' : `Loading ${Math.round(progress)}%`}
+            {ready
+              ? 'Start game'
+              : loadProgress > 0
+                ? `Loading ${Math.round(loadProgress)}%`
+                : 'Loading…'}
           </button>
         </div>
       </footer>
