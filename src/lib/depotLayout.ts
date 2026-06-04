@@ -54,12 +54,26 @@ export const NPC_SPAWN_POINTS: [number, number][] = [
 
 export const GAME = {
   MATCH_DURATION: 60,
-  MAX_NPCS_ALIVE: 5,
+  /** Concurrent NPC cap ramps up as the match elapses — more bodies on screen late. */
+  MAX_NPCS_ALIVE_START: 5,
+  MAX_NPCS_ALIVE_END: 8,
+  /** Expected NPCs per spawn event (a "burst"); grows toward match end. */
+  SPAWN_BATCH_START: 1.0,
+  SPAWN_BATCH_END: 2.2,
+  /** Hard cap per burst (also bounded by the number of spawn lanes). */
+  SPAWN_BATCH_MAX: 3,
   /** Spawn interval at match start (relaxed) → match end (frantic). */
   SPAWN_INTERVAL_START_MIN: 2.0,
   SPAWN_INTERVAL_START_MAX: 3.2,
   SPAWN_INTERVAL_END_MIN: 0.55,
   SPAWN_INTERVAL_END_MAX: 1.1,
+  /**
+   * Fraction of NPCs that swerve to a different bin partway through their
+   * approach, and the window (seconds into the approach) the swerve fires in.
+   */
+  NPC_SWITCH_CHANCE: 0.1,
+  NPC_SWITCH_DELAY_MIN: 0.5,
+  NPC_SWITCH_DELAY_MAX: 1.4,
   NPC_WALK_SPEED: 2.0,
   NPC_LEAVE_SPEED: 3.2,
   NPC_DEPOSIT_TIME: 1.4,

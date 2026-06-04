@@ -60,6 +60,63 @@ function pickTargetBin(wasteType: WasteType): WasteType {
   return wasteType
 }
 
+function clamp01(t: number) {
+  return Math.min(1, Math.max(0, t))
+}
+
+/** Concurrent NPC cap, ramped 5 → 8 across the match. */
+function maxAliveFor(matchProgress: number): number {
+  const t = clamp01(matchProgress)
+  return Math.round(lerp(GAME.MAX_NPCS_ALIVE_START, GAME.MAX_NPCS_ALIVE_END, t))
+}
+
+/**
+ * How many NPCs enter together on this spawn event. Expected size grows toward
+ * match end; the fractional part is rolled so the average rises smoothly
+ * (early ≈ always 1, late ≈ mostly 2, sometimes 3).
+ */
+function spawnBatchSize(matchProgress: number): number {
+  const expected = lerp(GAME.SPAWN_BATCH_START, GAME.SPAWN_BATCH_END, clamp01(matchProgress))
+  const base = Math.floor(expected)
+  const count = base + (Math.random() < expected - base ? 1 : 0)
+  return Math.max(1, Math.min(GAME.SPAWN_BATCH_MAX, count))
+}
+
+/** Fisher–Yates copy — used to hand each burst member a distinct spawn lane. */
+function shuffled<T>(arr: readonly T[]): T[] {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/** Build one randomized NPC, including its (10%) mid-walk bin swerve. */
+function makeNpc(id: number, sp: [number, number]): WasteNPCInit {
+  const wasteType = pick(BINS).id
+  return {
+    id,
+    startX: sp[0],
+    startZ: sp[1],
+    wasteType,
+    targetBinId: pickTargetBin(wasteType),
+    skinColor: pick(SKIN_COLORS),
+    shirtColor: pick(SHIRT_COLORS),
+    pantsColor: pick(PANTS_COLORS),
+    hairColor: pick(HAIR_COLORS),
+    hasHair: Math.random() < 0.82,
+    hasGlasses: Math.random() < 0.28,
+    girth: randInRange(0.9, 1.22),
+    scale: randInRange(0.9, 1.12),
+    walkPhaseOffset: Math.random() * Math.PI * 2,
+    switchTargetAt:
+      Math.random() < GAME.NPC_SWITCH_CHANCE
+        ? randInRange(GAME.NPC_SWITCH_DELAY_MIN, GAME.NPC_SWITCH_DELAY_MAX)
+        : null,
+  }
+}
+
 export function DepotNPCManager() {
   const [npcs, setNpcs] = useState<WasteNPCInit[]>([])
   const nextIdRef = useRef(0)
@@ -91,37 +148,25 @@ export function DepotNPCManager() {
 
     const dt = Math.min(delta, 0.05)
     spawnTimerRef.current += dt
+    const matchProgress = 1 - timeLeft / GAME.MATCH_DURATION
+    const maxAlive = maxAliveFor(matchProgress)
     if (
       spawnTimerRef.current >= nextIntervalRef.current &&
-      livingRef.current < GAME.MAX_NPCS_ALIVE
+      livingRef.current < maxAlive
     ) {
       spawnTimerRef.current = 0
-      const matchProgress = 1 - timeLeft / GAME.MATCH_DURATION
       nextIntervalRef.current = nextSpawnInterval(matchProgress)
-      const sp = pick(NPC_SPAWN_POINTS)
-      const wasteType = pick(BINS).id
-      const targetBinId = pickTargetBin(wasteType)
-      const id = nextIdRef.current++
-      livingRef.current += 1
-      setNpcs((prev) => [
-        ...prev,
-        {
-          id,
-          startX: sp[0],
-          startZ: sp[1],
-          wasteType,
-          targetBinId,
-          skinColor: pick(SKIN_COLORS),
-          shirtColor: pick(SHIRT_COLORS),
-          pantsColor: pick(PANTS_COLORS),
-          hairColor: pick(HAIR_COLORS),
-          hasHair: Math.random() < 0.82,
-          hasGlasses: Math.random() < 0.28,
-          girth: randInRange(0.9, 1.22),
-          scale: randInRange(0.9, 1.12),
-          walkPhaseOffset: Math.random() * Math.PI * 2,
-        },
-      ])
+      // Emit a whole burst (bounded by free slots and distinct spawn lanes) so
+      // the crowd arrives in clumps that thicken toward match end.
+      const count = Math.min(spawnBatchSize(matchProgress), maxAlive - livingRef.current)
+      const lanes = shuffled(NPC_SPAWN_POINTS)
+      const batch: WasteNPCInit[] = []
+      for (let i = 0; i < count; i++) {
+        const id = nextIdRef.current++
+        livingRef.current += 1
+        batch.push(makeNpc(id, lanes[i % lanes.length]))
+      }
+      setNpcs((prev) => [...prev, ...batch])
     }
   })
 

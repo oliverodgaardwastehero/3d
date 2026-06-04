@@ -2,7 +2,7 @@ import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef, useState } from 'react'
 import { Group, MathUtils, Mesh, Vector3 } from 'three'
 import { Billboard, Text } from '@react-three/drei'
-import { binById, GAME, type WasteType } from '../../lib/depotLayout'
+import { binById, BINS, GAME, type WasteType } from '../../lib/depotLayout'
 import { useDepot } from '../../lib/depotState'
 import { registerNPCBody } from '../../lib/npcBodies'
 import { Humanoid, ARM_REST_Z } from '../chapters/Humanoid'
@@ -39,6 +39,11 @@ export type WasteNPCInit = {
   scale: number
   /** Starting walk-cycle phase so all NPCs aren't lockstep. */
   walkPhaseOffset: number
+  /**
+   * Seconds into the approach at which this NPC swerves to a different bin,
+   * or null to never swerve. ~10% of NPCs are flagged at spawn.
+   */
+  switchTargetAt: number | null
 }
 
 type Props = WasteNPCInit & {
@@ -64,6 +69,7 @@ export function WasteNPC({
   girth,
   scale,
   walkPhaseOffset,
+  switchTargetAt,
   onRemove,
   onFall,
 }: Props) {
@@ -90,6 +96,10 @@ export function WasteNPC({
   const phaseT = useRef(0)
   const walkPhase = useRef(walkPhaseOffset)
   const facing = useRef(Math.PI / 2)
+  // The bin this NPC is currently walking toward. Mutable so a swerving NPC can
+  // repick mid-approach; all movement + scoring read this, not the initial prop.
+  const targetBinRef = useRef<WasteType>(targetBinId)
+  const switchedRef = useRef(false)
 
   const leaveDir = useRef(new Vector3(0, 0, 0))
   // Knockback state, set on hit and consumed during the falling phase.
@@ -153,8 +163,9 @@ export function WasteNPC({
 
       onFall?.(id)
       // Wrong-bin NPC → punching them is the correct play (✓, +1). Right-bin
-      // NPC → you stopped a good citizen (✗, -1).
-      const goodPunch = targetBinId !== wasteType
+      // NPC → you stopped a good citizen (✗, -1). Reads the *current* target so
+      // a swerved NPC scores by where they're actually headed now.
+      const goodPunch = targetBinRef.current !== wasteType
       if (goodPunch) {
         useDepot.getState().registerWrongStop()
       } else {
@@ -164,7 +175,7 @@ export function WasteNPC({
       setPunchFb(goodPunch ? 'good' : 'bad')
     })
     return unsub
-  }, [id, onFall, targetBinId, wasteType])
+  }, [id, onFall, wasteType])
 
   useFrame((_, delta) => {
     const g = groupRef.current
@@ -179,9 +190,20 @@ export function WasteNPC({
       g.scale.setScalar(scale * (0.6 + 0.4 * e))
     }
 
-    const target = binById(targetBinId)
-
     if (phase.current === 'approaching') {
+      // ~10% of NPCs change their mind once, mid-approach, and head for a
+      // different bin. The facing-lerp below turns the body smoothly, so it
+      // reads as a deliberate swerve rather than a snap.
+      if (
+        !switchedRef.current &&
+        switchTargetAt != null &&
+        phaseT.current >= switchTargetAt
+      ) {
+        switchedRef.current = true
+        const others = BINS.filter((b) => b.id !== targetBinRef.current)
+        targetBinRef.current = others[Math.floor(Math.random() * others.length)].id
+      }
+      const target = binById(targetBinRef.current)
       const dx = target.pos[0] - g.position.x
       const dz = target.pos[1] - g.position.z
       const d = Math.hypot(dx, dz)
@@ -207,10 +229,11 @@ export function WasteNPC({
         itemRef.current.scale.set(s, s, s)
       }
       if (phaseT.current >= GAME.NPC_DEPOSIT_TIME) {
-        if (targetBinId !== wasteType) {
-          useDepot.getState().registerWrongDeposit(targetBinId)
+        const finalBin = targetBinRef.current
+        if (finalBin !== wasteType) {
+          useDepot.getState().registerWrongDeposit(finalBin)
         } else {
-          useDepot.getState().registerCorrectDeposit(targetBinId)
+          useDepot.getState().registerCorrectDeposit(finalBin)
         }
         // Turn around and head back west out the gate.
         leaveDir.current.set(-1, 0, 0)
