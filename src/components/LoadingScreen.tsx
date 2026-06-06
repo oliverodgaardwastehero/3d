@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { useGame } from '../lib/store'
 import { loadTopScores, type ScoreEntry } from '../lib/highScore'
 import { fetchTopScores } from '../lib/leaderboard'
-import { Keycap, ArrowKeys } from './Keycap'
+import { Keycap, MoveKeys } from './Keycap'
 
 type Props = {
   onBegin: () => void
@@ -132,7 +132,7 @@ export function LoadingScreen({ onBegin }: Props) {
       <footer className="relative flex flex-col items-center gap-[clamp(1.25rem,3.5vh,3rem)] px-6 pb-[clamp(1.5rem,5vh,3rem)]">
         <div className="ts-rise flex flex-wrap items-center justify-center gap-x-[clamp(1.5rem,3vw,3rem)] gap-y-3 text-white" style={{ animationDelay: '220ms' }}>
           <ControlHint label="Move">
-            <ArrowKeys />
+            <MoveKeys />
           </ControlHint>
           <ControlHint label="Run">
             <Keycap>Shift</Keycap>

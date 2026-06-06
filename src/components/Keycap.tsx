@@ -29,16 +29,57 @@ export function Keycap({ children, size = 'md' }: KeycapProps) {
   )
 }
 
-/** D-pad style arrow cluster used for "Move" in the title-screen legend. */
-export function ArrowKeys() {
+/** A D-pad style diamond: one cap on top, three along the bottom. */
+function KeyCluster({
+  up,
+  left,
+  down,
+  right,
+}: {
+  up: string
+  left: string
+  down: string
+  right: string
+}) {
   return (
     <div className="flex flex-col items-center gap-1">
-      <Keycap size="sm">↑</Keycap>
+      <Keycap size="sm">{up}</Keycap>
       <div className="flex gap-1">
-        <Keycap size="sm">←</Keycap>
-        <Keycap size="sm">↓</Keycap>
-        <Keycap size="sm">→</Keycap>
+        <Keycap size="sm">{left}</Keycap>
+        <Keycap size="sm">{down}</Keycap>
+        <Keycap size="sm">{right}</Keycap>
       </div>
     </div>
+  )
+}
+
+/** A small "OR" divider separating two alternative key bindings. */
+function OrDivider() {
+  return (
+    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/45">
+      or
+    </span>
+  )
+}
+
+/** Both movement bindings — WASD and arrow D-pads — for the title-screen legend. */
+export function MoveKeys() {
+  return (
+    <div className="flex items-center gap-2.5">
+      <KeyCluster up="W" left="A" down="S" right="D" />
+      <OrDivider />
+      <KeyCluster up="↑" left="←" down="↓" right="→" />
+    </div>
+  )
+}
+
+/** Compact one-line "WASD or arrows" pair for the in-game HUD walk rows. */
+export function MoveKeysInline() {
+  return (
+    <>
+      <Keycap size="sm">WASD</Keycap>
+      <OrDivider />
+      <Keycap size="sm">↑↓←→</Keycap>
+    </>
   )
 }

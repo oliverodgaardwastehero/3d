@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { useGame } from '../lib/store'
 import { GuidePanel } from './office/GuidePanel'
 import { DepotHUD } from './depot/DepotHUD'
-import { Keycap } from './Keycap'
+import { Keycap, MoveKeysInline } from './Keycap'
 
 /** Frosted-glass control card matching the leaderboard / score-modal language. */
 function HudCard({ title, children }: { title: string; children: ReactNode }) {
@@ -25,7 +25,7 @@ export function HUD() {
         <HudCard title="Your first day">
           <div className="mt-2 flex flex-col gap-1.5 text-sm text-white/85">
             <div className="flex items-center gap-2">
-              <Keycap size="sm">WASD</Keycap> walk
+              <MoveKeysInline /> walk
             </div>
             <div className="flex items-center gap-2">
               <Keycap size="sm">Shift</Keycap> run
@@ -46,7 +46,7 @@ export function HUD() {
         <HudCard title="Recycling Depot">
           <div className="mt-2 flex flex-col gap-1.5 text-sm text-white/85">
             <div className="flex items-center gap-2">
-              <Keycap size="sm">WASD</Keycap> walk
+              <MoveKeysInline /> walk
             </div>
             <div className="flex items-center gap-2">
               <Keycap size="sm">Shift</Keycap> run
