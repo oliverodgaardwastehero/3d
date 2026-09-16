@@ -9,7 +9,9 @@ import {
   type ScoreEntry,
 } from '../lib/highScore'
 import { fetchTopScores } from '../lib/leaderboard'
+import { detectInputMode } from '../lib/fpsState'
 import { Keycap, MoveKeys } from './Keycap'
+import { SensitivityControl } from './fps/SensitivityControl'
 
 type Props = {
   onBegin: (mode: PlayableMode) => void
@@ -84,8 +86,8 @@ export function LoadingScreen({ onBegin }: Props) {
   const [hidden, setHidden] = useState(false)
   const [graceElapsed, setGraceElapsed] = useState(false)
   const [mode, setMode] = useState<PlayableMode>(() => loadMode())
-  // Touch legend arrives with the FPS scene in the next commit.
-  const touch = false
+  // Phones/tablets aim by dragging — show the matching legend.
+  const [touch] = useState(() => detectInputMode() === 'touch')
   // The leaderboard tab follows the picked mode but can be flipped on its own.
   const [board, setBoard] = useState<BoardId>(() => loadMode())
   // Both boards, seeded from the instant local mirrors and refreshed from the
@@ -251,6 +253,16 @@ export function LoadingScreen({ onBegin }: Props) {
 
         <ModePicker mode={mode} onPick={pickMode} touch={touch} />
 
+        {/* Look sensitivity for the blaster — persists per browser, also
+            adjustable in-game (Esc card / `[` `]` / touch gear). */}
+        {mode === 'fps' && (
+          <div
+            className="ts-rise flex justify-center rounded-xl bg-[#0e1430]/60 px-4 py-2 ring-1 ring-white/10 backdrop-blur-md"
+            style={{ animationDelay: '300ms' }}
+          >
+            <SensitivityControl />
+          </div>
+        )}
 
         <div className="ts-pop relative isolate">
           {/* Breathing cyan halo — appears the moment the game is ready, which

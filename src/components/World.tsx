@@ -7,6 +7,7 @@ import { GuideNPC } from './office/GuideNPC'
 import { RoomWatcher } from './office/RoomWatcher'
 import { Depot } from './depot/Depot'
 import { DepotNPCManager } from './depot/DepotNPCManager'
+import { FPSPlayer } from './fps/FPSPlayer'
 import { SPAWN as OFFICE_SPAWN } from '../lib/officeLayout'
 import { DEPOT_SPAWN, DEPOT_INITIAL_FACING } from '../lib/depotLayout'
 import { useGame } from '../lib/store'
@@ -18,6 +19,11 @@ export function World() {
   const characterPos = useRef(new Vector3(0, 0, 0))
 
   if (!gameMode) return null
+
+  // Both match modes play out in the same recycling yard with the same walkers;
+  // they differ only in how the player is embodied (3rd-person kicker vs.
+  // first-person blaster).
+  const inYard = gameMode === 'depot' || gameMode === 'fps'
 
   return (
     <>
@@ -58,7 +64,7 @@ export function World() {
         </>
       )}
 
-      {gameMode === 'depot' && (
+      {inYard && (
         <>
           {/* Lower, hazier sun for a warm late-afternoon read. sunPosition
               matches the directional key so cast shadows track the visible sun. */}
@@ -99,11 +105,15 @@ export function World() {
           <fog attach="fog" args={['#c9d6e0', 22, 95]} />
           <Depot />
           <DepotNPCManager />
-          <Character
-            positionRef={characterPos}
-            spawn={DEPOT_SPAWN}
-            initialFacing={DEPOT_INITIAL_FACING}
-          />
+          {gameMode === 'depot' ? (
+            <Character
+              positionRef={characterPos}
+              spawn={DEPOT_SPAWN}
+              initialFacing={DEPOT_INITIAL_FACING}
+            />
+          ) : (
+            <FPSPlayer positionRef={characterPos} />
+          )}
         </>
       )}
     </>
