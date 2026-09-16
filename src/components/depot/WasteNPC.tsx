@@ -1,10 +1,10 @@
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Group, MathUtils, Mesh, Vector3 } from 'three'
 import { Billboard, Text } from '@react-three/drei'
 import { binById, BINS, GAME, type WasteType } from '../../lib/depotLayout'
 import { useDepot } from '../../lib/depotState'
-import { registerNPCBody } from '../../lib/npcBodies'
+import { registerNPCBody, type HitOutcome, type HitZone } from '../../lib/npcBodies'
 import { Humanoid, ARM_REST_Z } from '../chapters/Humanoid'
 import { lerpAngle } from '../../lib/math'
 import { WasteItem } from './WasteItem'
@@ -13,12 +13,17 @@ const NPC_BODY_RADIUS = 0.5
 const FALL_DURATION = 0.55 // seconds for the tip-over animation
 const KNOCKBACK_DISTANCE = 2.0 // meters the body slides while falling
 
-// Floating ✓ / ✗ shown over a punched NPC.
+// Floating ✓ / ✗ (or the headshot bonus) shown over a stopped NPC.
 const FB_DURATION = 1.0 // seconds
 const FB_START_Y = 2.0
 const FB_END_Y = 3.3
-const FB_GOOD_COLOR = '#34d399' // punched a wrong-bin NPC (good stop)
-const FB_BAD_COLOR = '#f87171' // punched a right-bin NPC (mistake)
+const FB_GOOD_COLOR = '#34d399' // stopped a wrong-bin NPC (good stop)
+const FB_HEAD_COLOR = '#fcd34d' // ...with a headshot (bonus points)
+const FB_BAD_COLOR = '#f87171' // stopped a right-bin NPC (mistake)
+
+type PunchFeedback = { kind: HitOutcome; zone: HitZone }
+
+const fmtPoints = (n: number) => (Number.isInteger(n) ? `+${n}` : `+${n.toFixed(1)}`)
 
 export type WasteNPCInit = {
   id: number
@@ -86,8 +91,8 @@ export function WasteNPC({
   const spawnT = useRef(0)
   const shadowsOff = useRef(false)
 
-  // Floating ✓/✗ feedback shown when this NPC is punched.
-  const [punchFb, setPunchFb] = useState<'good' | 'bad' | null>(null)
+  // Floating ✓/✗ feedback shown when this NPC is punched / shot.
+  const [punchFb, setPunchFb] = useState<PunchFeedback | null>(null)
   const fbGroupRef = useRef<Group>(null)
   const fbTextRef = useRef<Mesh>(null)
   const fbStart = useRef(0)
@@ -116,20 +121,67 @@ export function WasteNPC({
     facing.current = Math.PI / 2
   }, [startX, startZ, scale])
 
-  // Register a soft body so the player can shove this NPC aside. Skips
-  // corpses (falling / fallen) so other NPCs walk through them freely.
+  /**
+   * Knock this walker down. Shared by both ways of stopping them — the
+   * 3rd-person kick (cone test on punch pulses) and the FPS blaster (hit-scan
+   * via the body registry). `toX/toZ` is the horizontal direction the body is
+   * thrown; `zone` is what was hit (a headshot on a wrong-bin walker scores
+   * the bonus). Books the score and returns whether the stop was the right call.
+   */
+  const knockDown = useCallback(
+    (toX: number, toZ: number, zone: HitZone = 'body'): HitOutcome => {
+      const g = groupRef.current
+      phase.current = 'falling'
+      phaseT.current = 0
+
+      // Knockback direction (away from the hit).
+      knockDirX.current = toX
+      knockDirZ.current = toZ
+      knockSlideProgress.current = 0
+
+      // Rotate the body to face the knockback direction so the pitch-forward
+      // fall sends the head outward in the same direction as the slide.
+      const knockFacing = Math.atan2(toX, toZ)
+      facing.current = knockFacing
+      if (g) g.rotation.y = knockFacing
+
+      onFall?.(id)
+      // Wrong-bin NPC → stopping them is the correct play (✓, +1). Right-bin
+      // NPC → you stopped a good citizen (✗, -1). Reads the *current* target so
+      // a swerved NPC scores by where they're actually headed now.
+      const good = targetBinRef.current !== wasteType
+      if (good) {
+        useDepot
+          .getState()
+          .registerWrongStop(zone === 'head' ? GAME.POINTS_HEADSHOT : GAME.POINTS_STOP)
+      } else {
+        useDepot.getState().registerRightStop()
+      }
+      fbStart.current = performance.now()
+      setPunchFb({ kind: good ? 'good' : 'bad', zone })
+      return good ? 'good' : 'bad'
+    },
+    [id, onFall, wasteType],
+  )
+
+  // Register a soft body so the player can shove this NPC aside, and so FPS
+  // shots can find it (body cylinder + head sphere, see lib/npcBodies HITBOX).
+  // Skips corpses (falling / fallen) so other NPCs walk through them freely
+  // and shots pass over them.
   useEffect(() => {
     const g = groupRef.current
     if (!g) return
     return registerNPCBody({
       position: g.position,
       radius: NPC_BODY_RADIUS,
+      scale,
       active: () =>
         phase.current !== 'falling' && phase.current !== 'fallen',
+      onHit: knockDown,
     })
-  }, [])
+  }, [knockDown, scale])
 
-  // React to punch pulses.
+  // React to punch pulses (3rd-person kick mode).
   useEffect(() => {
     const unsub = useDepot.subscribe((state, prev) => {
       if (state.punchPulse === prev.punchPulse) return
@@ -147,39 +199,16 @@ export function WasteNPC({
       const dot = toX * punch.fx + toZ * punch.fz
       if (dot < GAME.PUNCH_CONE_DOT) return
 
-      phase.current = 'falling'
-      phaseT.current = 0
-
-      // Knockback direction = vector from player to NPC (away from the hit).
-      knockDirX.current = toX
-      knockDirZ.current = toZ
-      knockSlideProgress.current = 0
-
-      // Rotate the body to face the knockback direction so the pitch-forward
-      // fall sends the head outward in the same direction as the slide.
-      const knockFacing = Math.atan2(toX, toZ)
-      facing.current = knockFacing
-      g.rotation.y = knockFacing
-
-      onFall?.(id)
-      // Wrong-bin NPC → punching them is the correct play (✓, +1). Right-bin
-      // NPC → you stopped a good citizen (✗, -1). Reads the *current* target so
-      // a swerved NPC scores by where they're actually headed now.
-      const goodPunch = targetBinRef.current !== wasteType
-      if (goodPunch) {
-        useDepot.getState().registerWrongStop()
-      } else {
-        useDepot.getState().registerRightStop()
-      }
-      fbStart.current = performance.now()
-      setPunchFb(goodPunch ? 'good' : 'bad')
+      knockDown(toX, toZ)
     })
     return unsub
-  }, [id, onFall, wasteType])
+  }, [knockDown])
 
   useFrame((_, delta) => {
     const g = groupRef.current
     if (!g) return
+    // FPS mode freezes the yard while the pointer isn't locked.
+    if (useDepot.getState().paused) return
     const dt = Math.min(delta, 0.05)
     phaseT.current += dt
 
@@ -399,15 +428,22 @@ export function WasteNPC({
         </group>
       </group>
 
-      {/* Floating ✓ / ✗ shown once when this NPC is punched. Sits above the body
-          (outside pitchRef so it stays upright while the corpse tips + slides). */}
+      {/* Floating ✓ / ✗ shown once when this NPC is stopped — a good headshot
+          shows its bonus instead. Sits above the body (outside pitchRef so it
+          stays upright while the corpse tips + slides). */}
       {punchFb && (
         <group ref={fbGroupRef} position={[0, FB_START_Y, 0]}>
           <Billboard>
             <Text
               ref={fbTextRef}
-              fontSize={1.0}
-              color={punchFb === 'good' ? FB_GOOD_COLOR : FB_BAD_COLOR}
+              fontSize={punchFb.kind === 'good' && punchFb.zone === 'head' ? 0.7 : 1.0}
+              color={
+                punchFb.kind === 'bad'
+                  ? FB_BAD_COLOR
+                  : punchFb.zone === 'head'
+                    ? FB_HEAD_COLOR
+                    : FB_GOOD_COLOR
+              }
               anchorX="center"
               anchorY="middle"
               outlineWidth={0.07}
@@ -415,7 +451,11 @@ export function WasteNPC({
               material-transparent
               material-toneMapped={false}
             >
-              {punchFb === 'good' ? '✓' : '✗'}
+              {punchFb.kind === 'bad'
+                ? '✗'
+                : punchFb.zone === 'head'
+                  ? fmtPoints(GAME.POINTS_HEADSHOT)
+                  : '✓'}
             </Text>
           </Billboard>
         </group>
