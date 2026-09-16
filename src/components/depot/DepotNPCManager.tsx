@@ -132,7 +132,7 @@ export function DepotNPCManager() {
   const corpseIdsRef = useRef<number[]>([])
 
   useFrame((_, delta) => {
-    const { phase, timeLeft } = useDepot.getState()
+    const { phase, timeLeft, paused } = useDepot.getState()
     if (phase !== phaseRef.current) {
       phaseRef.current = phase
       if (phase !== 'playing') {
@@ -145,6 +145,8 @@ export function DepotNPCManager() {
       }
     }
     if (phase !== 'playing') return
+    // FPS mode freezes spawning while the pointer isn't locked.
+    if (paused) return
 
     const dt = Math.min(delta, 0.05)
     spawnTimerRef.current += dt

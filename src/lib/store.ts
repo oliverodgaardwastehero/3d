@@ -1,7 +1,15 @@
 import { create } from 'zustand'
 import type { ChapterId } from './chapters'
 
-export type GameMode = 'office' | 'depot'
+/**
+ * `depot` is the classic 3rd-person kick game, `fps` is the first-person
+ * blaster variant of the same match (same yard, walkers and scoring rules,
+ * but you shoot instead of kick — and it keeps its own leaderboard).
+ */
+export type GameMode = 'office' | 'depot' | 'fps'
+
+/** The modes the title screen lets the player start. */
+export type PlayableMode = Extract<GameMode, 'depot' | 'fps'>
 
 type GameState = {
   hasStarted: boolean

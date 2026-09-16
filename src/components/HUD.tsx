@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react'
 import { useGame } from '../lib/store'
+import { useFps } from '../lib/fpsState'
 import { GuidePanel } from './office/GuidePanel'
 import { DepotHUD } from './depot/DepotHUD'
+import { FPSHUD } from './fps/FPSHUD'
 import { Keycap, MoveKeysInline } from './Keycap'
 
 /** Frosted-glass control card matching the leaderboard / score-modal language. */
@@ -17,6 +19,7 @@ function HudCard({ title, children }: { title: string; children: ReactNode }) {
 export function HUD() {
   const hasStarted = useGame((s) => s.hasStarted)
   const gameMode = useGame((s) => s.gameMode)
+  const inputMode = useFps((s) => s.inputMode)
   if (!hasStarted) return null
 
   if (gameMode === 'office') {
@@ -56,7 +59,42 @@ export function HUD() {
             </div>
           </div>
         </HudCard>
-        <DepotHUD />
+        <DepotHUD board="depot" />
+      </>
+    )
+  }
+
+  if (gameMode === 'fps') {
+    return (
+      <>
+        {/* Keyboard legend only makes sense with a mouse; the touch layer has
+            its own on-screen controls and hint. */}
+        {inputMode === 'pointer' && (
+          <HudCard title="Recycling Depot · FPS">
+            <div className="mt-2 flex flex-col gap-1.5 text-sm text-white/85">
+              <div className="flex items-center gap-2">
+                <MoveKeysInline /> walk
+              </div>
+              <div className="flex items-center gap-2">
+                <Keycap size="sm">Shift</Keycap> run
+              </div>
+              <div className="flex items-center gap-2">
+                <Keycap size="sm">Mouse</Keycap> aim
+              </div>
+              <div className="flex items-center gap-2">
+                <Keycap size="sm">Click</Keycap> shoot
+              </div>
+              <div className="flex items-center gap-2">
+                <Keycap size="sm">R</Keycap> reload
+              </div>
+              <div className="flex items-center gap-2">
+                <Keycap size="sm">[ ]</Keycap> sensitivity
+              </div>
+            </div>
+          </HudCard>
+        )}
+        <DepotHUD board="fps" />
+        <FPSHUD />
       </>
     )
   }

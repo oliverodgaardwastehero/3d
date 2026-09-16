@@ -80,6 +80,14 @@ export const GAME = {
   PUNCH_RADIUS: 2.8,
   PUNCH_CONE_DOT: 0.2,
   BIN_REACH: 1.0,
+  /**
+   * Scoring. Stopping a wrong-bin walker earns POINTS_STOP (kick or body
+   * shot); a blaster headshot earns POINTS_HEADSHOT. Stopping a good citizen
+   * always costs POINTS_MISTAKE, whatever you hit. Deposits stay ±1.
+   */
+  POINTS_STOP: 1,
+  POINTS_HEADSHOT: 1.5,
+  POINTS_MISTAKE: 1,
   /** NPCs are removed once they walk back past this X going west (out the gate). */
   LEAVE_DESPAWN_X: -11,
   WRONG_BIN_RATIO: 0.55,

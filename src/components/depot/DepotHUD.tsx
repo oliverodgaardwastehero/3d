@@ -3,23 +3,23 @@ import { useGame } from '../../lib/store'
 import { useDepot } from '../../lib/depotState'
 import { GAME } from '../../lib/depotLayout'
 import {
+  fmtScore,
   loadBestScore,
   maybeSaveBestScore,
   loadPlayerName,
   savePlayerName,
   sanitizeName,
   MAX_NAME_LEN,
+  type BoardId,
   type ScoreEntry,
 } from '../../lib/highScore'
 import { fetchTopScores, submitScore } from '../../lib/leaderboard'
-
-const fmtScore = (n: number) => (n >= 0 ? `+${n}` : `${n}`)
 
 const prefersReducedMotion = () =>
   typeof window !== 'undefined' &&
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
 
-/** Count a number up from 0 to `target` with an ease-out (skipped if reduced motion). */
+/** Count a number up from 0 to `target` in half-point steps with an ease-out (skipped if reduced motion). */
 function useCountUp(target: number, ms = 650): number {
   const [value, setValue] = useState(() => (prefersReducedMotion() ? target : 0))
   useEffect(() => {
@@ -31,7 +31,8 @@ function useCountUp(target: number, ms = 650): number {
     const start = performance.now()
     const tick = (now: number) => {
       const t = Math.min(1, (now - start) / ms)
-      setValue(Math.round(target * (1 - Math.pow(1 - t, 3))))
+      // Half-point steps: FPS headshots score 1.5, so totals can end in .5.
+      setValue(Math.round(target * (1 - Math.pow(1 - t, 3)) * 2) / 2)
       if (t < 1) raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
@@ -138,7 +139,16 @@ function CheckIcon() {
   )
 }
 
-export function DepotHUD() {
+type DepotHUDProps = {
+  /**
+   * Which leaderboard this match posts to. The kick game and the FPS game
+   * share the yard, rules and this HUD, but keep separate boards and separate
+   * local best-score records so their scores never mix.
+   */
+  board: BoardId
+}
+
+export function DepotHUD({ board }: DepotHUDProps) {
   const hasStarted = useGame((s) => s.hasStarted)
   const phase = useDepot((s) => s.phase)
   const timeLeft = useDepot((s) => s.timeLeft)
@@ -147,11 +157,14 @@ export function DepotHUD() {
   const correctStops = useDepot((s) => s.correctStops)
   const wrongDeposits = useDepot((s) => s.wrongDeposits)
   const correctDeposits = useDepot((s) => s.correctDeposits)
+  const shotsFired = useDepot((s) => s.shotsFired)
+  const shotsHit = useDepot((s) => s.shotsHit)
+  const headshots = useDepot((s) => s.headshots)
   const start = useDepot((s) => s.start)
   const reset = useDepot((s) => s.reset)
   const resetToMenu = useGame((s) => s.resetToMenu)
 
-  const [bestScore, setBestScore] = useState<number | null>(() => loadBestScore())
+  const [bestScore, setBestScore] = useState<number | null>(() => loadBestScore(board))
   const [isNewBest, setIsNewBest] = useState(false)
   const [showGo, setShowGo] = useState(false)
   // Leaderboard name entry (shown on a qualifying top-5 finish).
@@ -165,7 +178,7 @@ export function DepotHUD() {
   // against the pre-match record and stays correct even if the over-effect
   // re-runs (e.g. StrictMode double-invoke), where loadBestScore() would
   // already reflect this match's just-saved score.
-  const bestAtStartRef = useRef<number | null>(loadBestScore())
+  const bestAtStartRef = useRef<number | null>(loadBestScore(board))
 
   // Kick off the first match.
   useEffect(() => {
@@ -174,8 +187,8 @@ export function DepotHUD() {
 
   // Snapshot the record at the start of each match.
   useEffect(() => {
-    if (phase === 'playing') bestAtStartRef.current = loadBestScore()
-  }, [phase])
+    if (phase === 'playing') bestAtStartRef.current = loadBestScore(board)
+  }, [phase, board])
 
   // On match end: record the local best, snapshot the shared board, and decide
   // whether this score qualifies for the top 5. We only submit to the board on
@@ -190,7 +203,7 @@ export function DepotHUD() {
       return
     }
     const prev = bestAtStartRef.current
-    setBestScore(maybeSaveBestScore(score))
+    setBestScore(maybeSaveBestScore(board, score))
     setIsNewBest(prev == null || score > prev)
     setSaveState('idle')
     setSavedRank(null)
@@ -198,7 +211,7 @@ export function DepotHUD() {
     setTopOnOver(null)
 
     let cancelled = false
-    fetchTopScores(5).then((top) => {
+    fetchTopScores(board, 5).then((top) => {
       if (cancelled) return
       const lowest = top.length ? top[top.length - 1].score : -Infinity
       setTopOnOver(top)
@@ -208,7 +221,7 @@ export function DepotHUD() {
     return () => {
       cancelled = true
     }
-  }, [phase, score])
+  }, [phase, score, board])
 
   // Focus the name field as soon as it appears (qualified, not yet saved).
   useEffect(() => {
@@ -254,7 +267,7 @@ export function DepotHUD() {
     setSaveState('saving')
     const finalName = sanitizeName(name)
     savePlayerName(finalName)
-    const top = await submitScore(score, finalName, 5)
+    const top = await submitScore(board, score, finalName, 5)
     const idx = top.findIndex((e) => e.name === finalName && e.score === score)
     setSavedRank(idx >= 0 ? idx + 1 : null)
     setSaveState('saved')
@@ -262,20 +275,19 @@ export function DepotHUD() {
 
   return (
     <div className="pointer-events-none absolute inset-0 select-none">
-      {/* Top-center scoreboard */}
-      <div className="absolute left-1/2 top-6 -translate-x-1/2 flex items-center gap-6 rounded-2xl bg-black/55 px-6 py-3 text-white backdrop-blur">
+      {/* Top-center scoreboard. Phones get Time + Score only; the breakdown
+          needs the width of a tablet/desktop. */}
+      <div className="absolute left-1/2 top-4 flex max-w-[calc(100vw-1.5rem)] -translate-x-1/2 items-center gap-5 rounded-2xl bg-black/55 px-5 py-3 text-white backdrop-blur sm:top-6 sm:gap-6 sm:px-6">
         <Stat label="Time" value={`${mm}:${ss}`} />
         <div className="h-8 w-px bg-white/20" />
-        <Stat
-          label="Score"
-          value={score >= 0 ? `+${score}` : `${score}`}
-          tone={score < 0 ? 'rose' : 'emerald'}
-        />
-        <div className="h-8 w-px bg-white/20" />
-        <Stat label="Wrong stopped" value={wrongStops} tone="emerald" />
-        <Stat label="Saved" value={correctDeposits} tone="emerald" />
-        <Stat label="Right stopped" value={correctStops} tone="rose" />
-        <Stat label="Spoiled" value={wrongDeposits} tone="rose" />
+        <Stat label="Score" value={fmtScore(score)} tone={score < 0 ? 'rose' : 'emerald'} />
+        <div className="hidden items-center gap-6 sm:flex">
+          <div className="h-8 w-px bg-white/20" />
+          <Stat label="Wrong stopped" value={wrongStops} tone="emerald" />
+          <Stat label="Saved" value={correctDeposits} tone="emerald" />
+          <Stat label="Right stopped" value={correctStops} tone="rose" />
+          <Stat label="Spoiled" value={wrongDeposits} tone="rose" />
+        </div>
       </div>
 
       {/* Big animated GO! when the match starts */}
@@ -289,8 +301,10 @@ export function DepotHUD() {
 
       {/* Quick-help on opening seconds */}
       {phase === 'playing' && timeLeft > GAME.MATCH_DURATION - 4 && (
-        <div className="absolute bottom-24 left-1/2 -translate-x-1/2 rounded-full bg-black/45 px-4 py-1.5 text-xs uppercase tracking-[0.3em] text-zinc-200 backdrop-blur">
-          Punch (P) the ones heading to the wrong bin
+        <div className="absolute bottom-[12.5rem] left-1/2 w-max max-w-[calc(100vw-2rem)] -translate-x-1/2 rounded-full bg-black/45 px-4 py-1.5 text-center text-xs uppercase tracking-[0.3em] text-zinc-200 backdrop-blur sm:bottom-24">
+          {board === 'fps'
+            ? 'Shoot the ones heading to the wrong bin'
+            : 'Kick (Space) the ones heading to the wrong bin'}
         </div>
       )}
 
@@ -326,6 +340,17 @@ export function DepotHUD() {
                 <StatChip label="Right stopped" value={correctStops} tone="bad" />
                 <StatChip label="Spoiled" value={wrongDeposits} tone="bad" />
               </div>
+
+              {board === 'fps' && (
+                <div className="mt-3 text-[11px] font-semibold uppercase tracking-[0.28em] text-white/45">
+                  {shotsFired === 0
+                    ? 'Not a single shot fired'
+                    : `${shotsHit} of ${shotsFired} shots hit · ${Math.round((100 * shotsHit) / shotsFired)}% accuracy` +
+                      (headshots > 0
+                        ? ` · ${headshots} headshot${headshots === 1 ? '' : 's'}`
+                        : '')}
+                </div>
+              )}
 
               {/* Top-5 name entry — only on a qualifying finish */}
               <div className="mt-7">

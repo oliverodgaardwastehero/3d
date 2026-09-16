@@ -1,5 +1,6 @@
 import { Suspense, lazy } from 'react'
-import { useGame } from '../lib/store'
+import { useGame, type PlayableMode } from '../lib/store'
+import { requestPointerLock, useFps } from '../lib/fpsState'
 import { HUD } from './HUD'
 import { LoadingScreen } from './LoadingScreen'
 
@@ -12,8 +13,13 @@ const Scene = lazy(() => import('./Scene'))
 export function Game() {
   const hasStarted = useGame((s) => s.hasStarted)
 
-  const handleBegin = () => {
-    useGame.getState().start('depot')
+  const handleBegin = (mode: PlayableMode) => {
+    useGame.getState().start(mode)
+    // Pointer lock needs a user gesture, and the Start click / Enter press is
+    // one — grab the mouse right here so FPS mode goes straight into aiming.
+    // If the browser refuses, the in-game "Click to take aim" prompt covers it.
+    // Touch devices skip this: they aim by dragging, no lock involved.
+    if (mode === 'fps' && useFps.getState().inputMode === 'pointer') requestPointerLock()
   }
 
   return (

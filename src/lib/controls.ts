@@ -5,6 +5,8 @@ export const CONTROL_MAP = [
   { name: 'right', keys: ['ArrowRight', 'KeyD'] },
   { name: 'run', keys: ['ShiftLeft', 'ShiftRight'] },
   { name: 'kick', keys: ['Space'] },
+  // FPS mode only — reload the blaster.
+  { name: 'reload', keys: ['KeyR'] },
 ] as const
 
 export type ControlName = (typeof CONTROL_MAP)[number]['name']
