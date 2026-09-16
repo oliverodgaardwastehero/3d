@@ -1,5 +1,5 @@
 import { Suspense, lazy } from 'react'
-import { useGame } from '../lib/store'
+import { useGame, type PlayableMode } from '../lib/store'
 import { HUD } from './HUD'
 import { LoadingScreen } from './LoadingScreen'
 
@@ -12,8 +12,8 @@ const Scene = lazy(() => import('./Scene'))
 export function Game() {
   const hasStarted = useGame((s) => s.hasStarted)
 
-  const handleBegin = () => {
-    useGame.getState().start('depot')
+  const handleBegin = (mode: PlayableMode) => {
+    useGame.getState().start(mode)
   }
 
   return (

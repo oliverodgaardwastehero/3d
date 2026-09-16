@@ -56,7 +56,7 @@ export function HUD() {
             </div>
           </div>
         </HudCard>
-        <DepotHUD />
+        <DepotHUD board="depot" />
       </>
     )
   }
